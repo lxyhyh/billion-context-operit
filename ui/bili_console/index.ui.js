@@ -482,16 +482,20 @@ function Screen(ctx) {
 
         // 日志
         UI.Text({ text: "日志（官方 bili.log 尾部）", fontSize: 16, bold: true }),
-        UI.Row({ spacing: 8, verticalAlignment: "center" }, [
-            UI.TextField({
-                value: logLines,
-                onValueChange: setLogLines,
-                label: "行数",
-                singleLine: true,
-                width: 100
-            }),
-            UI.Button({ text: "读取", onClick: doLogs, enabled: !busy })
-        ]),
+        UI.TextField({
+            value: logLines,
+            onValueChange: setLogLines,
+            label: "行数",
+            singleLine: true,
+            fillMaxWidth: true
+        }),
+        UI.Spacer({ height: 4 }),
+        UI.Button({
+            text: "读取日志",
+            onClick: doLogs,
+            enabled: !busy,
+            fillMaxWidth: true
+        }),
         UI.Card({ containerColor: "#141414", padding: 8 }, [
             UI.Text({
                 text: logText ? logText.slice(-12000) : "点击「读取」查看 ~/.local/state/billion-context/bili.log 尾部",
