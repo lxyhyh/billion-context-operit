@@ -487,9 +487,10 @@ const BiliManager = (function () {
         return pids;
     }
 
-    async function findBiliPidsByProcess() {
+    async function findBiliPidsByProcess(port) {
+        var pattern = "((bili|fakebili|fake_bili_server) --host|bili --host).*--port " + String(parsePositiveInt(port, DEFAULT_PORT));
         var result = await execCommand(
-            "pgrep -f 'bili' 2>/dev/null | head -10",
+            "pgrep -f " + shellQuote(pattern) + " 2>/dev/null | head -10",
             8000
         );
         var pids = [];
@@ -528,7 +529,7 @@ const BiliManager = (function () {
             function extractVersion(lines, prefix) {
                 for (var i = 0; i < lines.length; i++) {
                     var line = lines[i];
-                    if (line.indexOf(prefix) === 0) {
+                    if (prefix && line.indexOf(prefix) === 0) {
                         return line.slice(prefix.length).trim();
                     }
                     if (/^v?\d+\.\d+\.\d+/.test(line)) {
@@ -711,6 +712,15 @@ const BiliManager = (function () {
             var currentHealth = await probeHealth(port, 6000);
             if (currentHealth.healthy) {
                 await saveConfig(host, port);
+                // 补写 PID 文件：若非本插件启动（无 PID 文件），按端口反查进程并落盘
+                var existingPid = await readPidFile(port);
+                if (!existingPid) {
+                    var portPids = await findBiliPidsByPort(port);
+                    var chosen = portPids.length > 0 ? portPids[0] : null;
+                    if (chosen) {
+                        await execCommand("echo " + String(chosen) + " > " + shellQuote(buildPidFile(port)) + " 2>/dev/null", 8000);
+                    }
+                }
                 return createSuccessResult({
                     alreadyRunning: true,
                     running: true,
@@ -804,9 +814,22 @@ const BiliManager = (function () {
                     }
                 }
             }
+            if (targets.length === 0) {
+                // 兜底：按命令行特征 pgrep（ss/lsof 不可用时）
+                var procPids = await findBiliPidsByProcess(port);
+                for (var j2 = 0; j2 < procPids.length; j2++) {
+                    if (targets.indexOf(procPids[j2]) < 0) {
+                        targets.push(procPids[j2]);
+                    }
+                }
+            }
 
             for (var j = 0; j < targets.length; j++) {
-                await execCommand("kill " + String(targets[j]) + " 2>/dev/null; true", 8000);
+                // setsid 启动后 PGID == PID，先杀进程组（覆盖 bili 派生的子进程）
+                await execCommand(
+                    "kill -- -" + String(targets[j]) + " 2>/dev/null; kill " + String(targets[j]) + " 2>/dev/null; true",
+                    8000
+                );
                 stoppedPids.push(targets[j]);
             }
 
@@ -821,8 +844,28 @@ const BiliManager = (function () {
 
             if (!stopped && targets.length > 0) {
                 for (var k = 0; k < targets.length; k++) {
-                    await execCommand("kill -9 " + String(targets[k]) + " 2>/dev/null; true", 8000);
+                    await execCommand(
+                        "kill -9 -- -" + String(targets[k]) + " 2>/dev/null; kill -9 " + String(targets[k]) + " 2>/dev/null; true",
+                        8000
+                    );
                 }
+                await Tools.System.sleep(1200);
+                health = await probeHealth(port, 5000);
+                stopped = !health.healthy;
+            }
+            if (!stopped) {
+                // 最终兜底：pgrep 精确匹配 bili 启动命令行并排除自身 PID（覆盖 wrapper/孤儿进程）
+                // 注意：不能用 pkill -f，因为执行 shell 自身的命令行也含该模式，会自杀。
+                var sweepCommand = [
+                    "pattern=" + shellQuote("((bili|fakebili|fake_bili_server) --host|bili --host).*--port " + String(port)),
+                    "self=$$",
+                    "for p in $(pgrep -f \"$pattern\" 2>/dev/null); do",
+                    "  [ \"$p\" = \"$self\" ] && continue",
+                    "  kill -9 \"$p\" 2>/dev/null; true",
+                    "done",
+                    "true"
+                ].join(" ");
+                await execCommand(sweepCommand, 8000);
                 await Tools.System.sleep(1200);
                 health = await probeHealth(port, 5000);
                 stopped = !health.healthy;
