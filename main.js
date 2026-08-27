@@ -17,6 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerToolPkg = registerToolPkg;
 
 const biliConsoleUI = __importDefault(require("./ui/bili_console/index.ui.js"));
+const biliConfigUI = __importDefault(require("./ui/bili_config/index.ui.js"));
 
 function registerToolPkg() {
     // 只用 registerToolboxUiModule（官方 linux_ssh 范本）：
@@ -32,6 +33,19 @@ function registerToolPkg() {
             zh: "billion-context 管理",
             en: "billion-context Manager",
             default: "billion-context Manager"
+        }
+    });
+
+    // 第二个工具箱入口：配置页（toolboxUiModules 为列表，官方支持多模块）
+    ToolPkg.registerToolboxUiModule({
+        id: "bili_config",
+        runtime: "compose_dsl",
+        screen: biliConfigUI,
+        params: {},
+        title: {
+            zh: "billion-context 配置",
+            en: "billion-context Config",
+            default: "billion-context Config"
         }
     });
 

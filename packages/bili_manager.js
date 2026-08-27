@@ -39,7 +39,8 @@
             "parameters": [
                 { "name": "host", "description": { "zh": "监听地址，默认 127.0.0.1", "en": "Listen host, default 127.0.0.1" }, "type": "string", "required": false },
                 { "name": "port", "description": { "zh": "监听端口，默认 8787", "en": "Listen port, default 8787" }, "type": "number", "required": false },
-                { "name": "wait_seconds", "description": { "zh": "健康轮询最长等待秒数，默认 45", "en": "Max health poll seconds, default 45" }, "type": "number", "required": false }
+                { "name": "wait_seconds", "description": { "zh": "健康轮询最长等待秒数，默认 45", "en": "Max health poll seconds, default 45" }, "type": "number", "required": false },
+                { "name": "env", "description": { "zh": "临时环境变量注入（本次启动生效，不写入配置文件）。对象形式 {KEY: value} 或字符串形式 \"KEY=VALUE;KEY2=VALUE2\"。例如 {\"ACP_RENDER_NONE\": \"1\"}。", "en": "Temporary env vars for this launch only (not persisted). Object {KEY: value} or string \"KEY=VALUE;KEY2=VALUE2\". E.g. {\"ACP_RENDER_NONE\":\"1\"}." }, "type": "string", "required": false }
             ]
         },
         {
@@ -113,6 +114,39 @@
                 { "name": "upstream_base_url", "description": { "zh": "原始 upstream Base URL，例如 https://api.openai.com/v1", "en": "Original upstream base URL, e.g. https://api.openai.com/v1" }, "type": "string", "required": true },
                 { "name": "port", "description": { "zh": "bili 端口，默认 8787", "en": "bili port, default 8787" }, "type": "number", "required": false },
                 { "name": "host", "description": { "zh": "bili 主机，默认 127.0.0.1", "en": "bili host, default 127.0.0.1" }, "type": "string", "required": false }
+            ]
+        },
+        {
+            "name": "bili_config_get",
+            "description": {
+                "zh": "读取 billion-context 官方配置文件（默认 ~/.config/billion-context/billion-context.json，BILI_CONFIG_FILE 可覆盖），返回解析后的完整配置对象；文件不存在或解析失败时给出明确错误。",
+                "en": "Read the official billion-context config file (default ~/.config/billion-context/billion-context.json, overridable by BILI_CONFIG_FILE) and return the parsed config object; report a clear error when missing or unparsable."
+            },
+            "parameters": [
+                { "name": "config_file", "description": { "zh": "自定义配置文件路径（可选，覆盖默认路径解析）", "en": "Custom config file path (optional, overrides default resolution)" }, "type": "string", "required": false }
+            ]
+        },
+        {
+            "name": "bili_config_set",
+            "description": {
+                "zh": "按点路径设置 billion-context 配置项（如 port、compress.minCompressRange、mitm.domains），原子写回配置文件并保留未知字段。值自动按 JSON 类型解析（数字/布尔/数组/对象/字符串）。",
+                "en": "Set a billion-context config field by dot path (e.g. port, compress.minCompressRange, mitm.domains) and atomically write back the config file, preserving unknown fields. Values are JSON-typed (number/boolean/array/object/string)."
+            },
+            "parameters": [
+                { "name": "path", "description": { "zh": "点路径，如 port 或 compress.minCompressRange", "en": "Dot path, e.g. port or compress.minCompressRange" }, "type": "string", "required": true },
+                { "name": "value", "description": { "zh": "JSON 值（数字/布尔/数组/对象/字符串）", "en": "JSON value (number/boolean/array/object/string)" }, "type": "string", "required": true },
+                { "name": "config_file", "description": { "zh": "自定义配置文件路径（可选）", "en": "Custom config file path (optional)" }, "type": "string", "required": false }
+            ]
+        },
+        {
+            "name": "bili_config_clear",
+            "description": {
+                "zh": "按点路径删除 billion-context 配置项，原子写回配置文件。父对象为空时级联删除（如 compress 下全部清空则删除 compress 本身）。",
+                "en": "Remove a billion-context config field by dot path and atomically write back. Empty parent objects are pruned (e.g. removing the last compress.* deletes compress itself)."
+            },
+            "parameters": [
+                { "name": "path", "description": { "zh": "点路径，如 compress.minCompressRange", "en": "Dot path, e.g. compress.minCompressRange" }, "type": "string", "required": true },
+                { "name": "config_file", "description": { "zh": "自定义配置文件路径（可选）", "en": "Custom config file path (optional)" }, "type": "string", "required": false }
             ]
         }
     ]
@@ -451,6 +485,46 @@ const BiliManager = (function () {
         return "'" + asText(value).replace(/'/g, "'\"'\"'") + "'";
     }
 
+    /**
+     * 将 env 参数（对象 或 "KEY=VALUE;KEY2=VALUE2" 字符串）转成 shell 内联前缀。
+     * 返回 ""（无注入）或 "KEY='value' KEY2='value2' "（带尾随空格，接在 setsid 后）。
+     */
+    function buildEnvPrefix(envParam) {
+        var entries = [];
+        if (envParam && typeof envParam === "object" && !Array.isArray(envParam)) {
+            for (var key in envParam) {
+                if (Object.prototype.hasOwnProperty.call(envParam, key)) {
+                    entries.push([key, asText(envParam[key])]);
+                }
+            }
+        } else if (typeof envParam === "string") {
+            var parts = envParam.split(";");
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i].trim();
+                if (!part) {
+                    continue;
+                }
+                var eq = part.indexOf("=");
+                if (eq <= 0) {
+                    continue;
+                }
+                entries.push([part.slice(0, eq).trim(), part.slice(eq + 1)]);
+            }
+        }
+        if (entries.length === 0) {
+            return "";
+        }
+        var prefix = "";
+        for (var j = 0; j < entries.length; j++) {
+            var name = entries[j][0];
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+                continue;
+            }
+            prefix += name + "=" + shellQuote(entries[j][1]) + " ";
+        }
+        return prefix;
+    }
+
     async function readPidFile(port) {
         var pidFile = buildPidFile(port);
         var result = await execCommand("cat " + shellQuote(pidFile) + " 2>/dev/null", 8000);
@@ -740,8 +814,9 @@ const BiliManager = (function () {
             );
 
             // 轻提交：nohup setsid 脱离 terminal 生命周期，毫秒级返回
+            var envPrefix = buildEnvPrefix(params && params.env);
             var launchCommand = [
-                "nohup setsid bili --host " + shellQuote(host) + " --port " + String(port),
+                "nohup setsid " + envPrefix + "bili --host " + shellQuote(host) + " --port " + String(port),
                 "> " + shellQuote(buildStartupLog(port)) + " 2>&1 < /dev/null &",
                 "echo $! > " + shellQuote(buildPidFile(port)),
                 "echo __BILI_LAUNCH_SUBMITTED__"
@@ -1093,6 +1168,229 @@ const BiliManager = (function () {
     }
 
     /* ------------------------------------------------------------------ */
+    /* billion-context 官方配置读写                                          */
+    /* ------------------------------------------------------------------ */
+
+    var BILI_CONFIG_DEFAULT_PATH = "$HOME/.config/billion-context/billion-context.json";
+
+    function resolveBiliConfigPath(customPath) {
+        var explicit = firstNonBlank(customPath, "");
+        if (explicit) {
+            return explicit;
+        }
+        // BILI_CONFIG_FILE 环境变量优先（与 billion-context 官方一致）
+        var envPath = firstNonBlank(process.env && process.env.BILI_CONFIG_FILE, "");
+        if (envPath) {
+            return envPath;
+        }
+        return BILI_CONFIG_DEFAULT_PATH;
+    }
+
+    async function readBiliConfigFile(configPath) {
+        var path = resolveBiliConfigPath(configPath);
+        var existsResult = await Tools.Files.exists(path, "linux");
+        var exists = !!(existsResult && (existsResult.exists === true || existsResult.success === true));
+        if (!exists) {
+            return { path: path, exists: false, config: {} };
+        }
+        var readResult = await Tools.Files.read({ path: path, environment: "linux" });
+        var content = asText(readResult && readResult.content).trim();
+        if (!content) {
+            return { path: path, exists: true, config: {} };
+        }
+        var parsed;
+        try {
+            parsed = JSON.parse(content);
+        } catch (error) {
+            return { path: path, exists: true, parseError: error && error.message ? error.message : String(error), raw: content.slice(0, 2000) };
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            return { path: path, exists: true, parseError: "配置根节点必须是 JSON 对象", raw: content.slice(0, 2000) };
+        }
+        return { path: path, exists: true, config: parsed };
+    }
+
+    async function writeBiliConfigFile(path, config) {
+        // 确保父目录存在
+        var dir = path.replace(/\/[^/]*$/, "");
+        try {
+            await Tools.Files.mkdir(dir, true, "linux");
+        } catch (_error) {
+            // 目录已存在或不可建时忽略，交给 write 报错
+        }
+        var payload = JSON.stringify(config, null, 2) + "\n";
+        await Tools.Files.write(path, payload, false, "linux");
+        return path;
+    }
+
+    /**
+     * 点路径取值/赋值/删除。path 形如 "port" 或 "compress.minCompressRange"。
+     * 返回 [ok, error, value]。
+     */
+    function getByDotPath(obj, path) {
+        var parts = path.split(".").filter(Boolean);
+        var current = obj;
+        for (var i = 0; i < parts.length; i++) {
+            if (current === null || typeof current !== "object") {
+                return [false, "路径 " + path + " 不存在（" + parts.slice(0, i).join(".") + " 不是对象）", undefined];
+            }
+            if (!Object.prototype.hasOwnProperty.call(current, parts[i])) {
+                return [false, "路径 " + path + " 不存在（缺少段 " + parts[i] + "）", undefined];
+            }
+            current = current[parts[i]];
+        }
+        return [true, null, current];
+    }
+
+    function setByDotPath(obj, path, value) {
+        var parts = path.split(".").filter(Boolean);
+        if (parts.length === 0) {
+            return "路径不能为空";
+        }
+        var current = obj;
+        for (var i = 0; i < parts.length - 1; i++) {
+            var part = parts[i];
+            if (current[part] === null || typeof current[part] !== "object" || Array.isArray(current[part])) {
+                current[part] = {};
+            }
+            current = current[part];
+        }
+        current[parts[parts.length - 1]] = value;
+        return null;
+    }
+
+    function deleteByDotPath(obj, path) {
+        var parts = path.split(".").filter(Boolean);
+        if (parts.length === 0) {
+            return "路径不能为空";
+        }
+        var stack = [];
+        var current = obj;
+        for (var i = 0; i < parts.length - 1; i++) {
+            var part = parts[i];
+            if (current === null || typeof current !== "object" || !Object.prototype.hasOwnProperty.call(current, part)) {
+                return null; // 路径不存在，无需删除
+            }
+            stack.push(current);
+            current = current[part];
+        }
+        var lastPart = parts[parts.length - 1];
+        if (current === null || typeof current !== "object" || !Object.prototype.hasOwnProperty.call(current, lastPart)) {
+            return null; // 末段不存在
+        }
+        delete current[lastPart];
+        // 级联清理空父对象
+        for (var j = stack.length - 1; j >= 0; j--) {
+            var parent = stack[j];
+            var child = parts[j];
+            var childObj = parent[child];
+            if (childObj && typeof childObj === "object" && !Array.isArray(childObj) && Object.keys(childObj).length === 0) {
+                delete parent[child];
+            } else {
+                break;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 解析 JSON 值：数字/布尔/null/数组/对象/字符串。失败返回 null。
+     */
+    function parseJsonValue(raw) {
+        if (typeof raw === "string") {
+            var trimmed = raw.trim();
+            if (trimmed === "") {
+                return { ok: false, error: "值为空" };
+            }
+            try {
+                return { ok: true, value: JSON.parse(trimmed) };
+            } catch (error) {
+                return { ok: false, error: "不是合法 JSON：" + (error && error.message ? error.message : String(error)) };
+            }
+        }
+        return { ok: true, value: raw };
+    }
+
+    async function bili_config_get(params) {
+        return await runTool(async function () {
+            var read = await readBiliConfigFile(params && params.config_file);
+            if (read.parseError) {
+                return createErrorResult(new Error("配置文件解析失败：" + read.parseError), {
+                    configFile: read.path,
+                    exists: read.exists,
+                    rawPreview: read.raw
+                });
+            }
+            return createSuccessResult({
+                configFile: read.path,
+                exists: read.exists,
+                config: read.config,
+                note: "配置文件不存在时返回空对象，首次 bili_config_set 会自动创建。修改后需重启 bili 生效。"
+            });
+        });
+    }
+
+    async function bili_config_set(params) {
+        return await runTool(async function () {
+            var path = firstNonBlank(params && params.path, "");
+            if (!path) {
+                return createErrorResult(new Error("path 不能为空"));
+            }
+            var parsedValue = parseJsonValue(params && params.value);
+            if (!parsedValue.ok) {
+                return createErrorResult(new Error(parsedValue.error));
+            }
+            var read = await readBiliConfigFile(params && params.config_file);
+            if (read.parseError) {
+                return createErrorResult(new Error("配置文件解析失败：" + read.parseError), {
+                    configFile: read.path,
+                    exists: read.exists,
+                    rawPreview: read.raw
+                });
+            }
+            var config = read.config;
+            var error = setByDotPath(config, path, parsedValue.value);
+            if (error) {
+                return createErrorResult(new Error(error));
+            }
+            var filePath = await writeBiliConfigFile(read.path, config);
+            return createSuccessResult({
+                configFile: filePath,
+                path: path,
+                value: parsedValue.value,
+                config: config,
+                note: "已写入。重启 bili 后生效（CLI 参数 > 环境变量 > 配置文件）。"
+            });
+        });
+    }
+
+    async function bili_config_clear(params) {
+        return await runTool(async function () {
+            var path = firstNonBlank(params && params.path, "");
+            if (!path) {
+                return createErrorResult(new Error("path 不能为空"));
+            }
+            var read = await readBiliConfigFile(params && params.config_file);
+            if (read.parseError) {
+                return createErrorResult(new Error("配置文件解析失败：" + read.parseError), {
+                    configFile: read.path,
+                    exists: read.exists,
+                    rawPreview: read.raw
+                });
+            }
+            var config = read.config;
+            deleteByDotPath(config, path);
+            var filePath = await writeBiliConfigFile(read.path, config);
+            return createSuccessResult({
+                configFile: filePath,
+                path: path,
+                config: config,
+                note: "已清除。重启 bili 后生效。"
+            });
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
     /* 导出                                                               */
     /* ------------------------------------------------------------------ */
 
@@ -1107,6 +1405,9 @@ const BiliManager = (function () {
     tools.update = update;
     tools.logs = logs;
     tools.proxy_url = proxy_url;
+    tools.bili_config_get = bili_config_get;
+    tools.bili_config_set = bili_config_set;
+    tools.bili_config_clear = bili_config_clear;
 
     return {
         detect: function (params) { return tools.detect(params); },
@@ -1119,7 +1420,10 @@ const BiliManager = (function () {
         version: function (params) { return tools.version(params); },
         update: function (params) { return tools.update(params); },
         logs: function (params) { return tools.logs(params); },
-        proxy_url: function (params) { return tools.proxy_url(params); }
+        proxy_url: function (params) { return tools.proxy_url(params); },
+        bili_config_get: function (params) { return tools.bili_config_get(params); },
+        bili_config_set: function (params) { return tools.bili_config_set(params); },
+        bili_config_clear: function (params) { return tools.bili_config_clear(params); }
     };
 })();
 
@@ -1134,3 +1438,6 @@ exports.version = BiliManager.version;
 exports.update = BiliManager.update;
 exports.logs = BiliManager.logs;
 exports.proxy_url = BiliManager.proxy_url;
+exports.bili_config_get = BiliManager.bili_config_get;
+exports.bili_config_set = BiliManager.bili_config_set;
+exports.bili_config_clear = BiliManager.bili_config_clear;
