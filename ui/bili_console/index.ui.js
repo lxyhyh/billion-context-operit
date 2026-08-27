@@ -420,15 +420,10 @@ function Screen(ctx) {
 
         // 状态卡片（加大间距，信息分块）
         UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 20 }, [
-            // 核心状态：「状态」标签 + 状态值（字号统一 15）
-            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
-                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "状态", color: "#BBBBBB", fontSize: 15, bold: true })
-                ]),
-                UI.Row({ spacing: 10, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: statusText, color: statusColor, bold: true, fontSize: 15 }),
-                    UI.Text({ text: healthy === true ? "✓ ok=true" : "", color: "#4CAF50", fontSize: 15, bold: true })
-                ])
+            // 核心状态：「状态：已停止」连在一起显示
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", paddingHorizontal: 8 }, [
+                UI.Text({ text: "状态：" + statusText, color: statusColor, bold: true, fontSize: 16 }),
+                UI.Text({ text: healthy === true ? "  ✓ ok=true" : "", color: "#4CAF50", fontSize: 15, bold: true })
             ]),
             UI.Spacer({ height: 12 }),
 
