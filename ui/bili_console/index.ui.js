@@ -419,7 +419,7 @@ function Screen(ctx) {
         UI.Text({ text: "billion-context 管理器", fontSize: 20, bold: true }),
 
         // 状态卡片（加大间距，信息分块）
-        UI.Card({ containerColor: "#1E1E1E", padding: 16 }, [
+        UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 16 }, [
             // 核心状态：大字醒目，左右分布
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
                 UI.Text({ text: "状态", color: "#BBBBBB", fontSize: 15, bold: true }),
@@ -485,20 +485,16 @@ function Screen(ctx) {
             })
         ]),
 
-        // 操作按钮（每行 2 个，spaceBetween 两端分布）
-        UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
+        // 操作按钮
+        UI.Row({ spacing: 8 }, [
             UI.Button({ text: "刷新", onClick: refreshAll, enabled: !busy }),
-            UI.Button({ text: "检测", onClick: doDetect, enabled: !busy })
-        ]),
-        UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
+            UI.Button({ text: "检测", onClick: doDetect, enabled: !busy }),
             UI.Button({ text: "安装", onClick: doInstall, enabled: !busy && installed !== true }),
             UI.Button({ text: "更新", onClick: doUpdate, enabled: !busy && installed === true })
         ]),
-        UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
+        UI.Row({ spacing: 8 }, [
             UI.Button({ text: "启动", onClick: doStart, enabled: !busy && healthy !== true && installed === true }),
-            UI.Button({ text: "停止", onClick: doStop, enabled: !busy && running === true })
-        ]),
-        UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
+            UI.Button({ text: "停止", onClick: doStop, enabled: !busy && running === true }),
             UI.Button({ text: "重启", onClick: doRestart, enabled: !busy && installed === true }),
             UI.Button({ text: "健康检查", onClick: doHealth, enabled: !busy })
         ]),
@@ -551,7 +547,7 @@ function Screen(ctx) {
             enabled: !busy,
             fillMaxWidth: true
         }),
-        UI.Card({ containerColor: "#141414", padding: 8 }, [
+        UI.Card({ fillMaxWidth: true, containerColor: "#141414", padding: 8 }, [
             UI.Text({
                 text: logText ? logText.slice(-12000) : "点击「读取」查看 ~/.local/state/billion-context/bili.log 尾部",
                 color: "#AAAAAA",
