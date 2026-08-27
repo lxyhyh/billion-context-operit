@@ -1171,23 +1171,52 @@ const BiliManager = (function () {
     /* billion-context 官方配置读写                                          */
     /* ------------------------------------------------------------------ */
 
-    var BILI_CONFIG_DEFAULT_PATH = "$HOME/.config/billion-context/billion-context.json";
+    // 候选路径：先真实绝对路径（容器内 HOME=/root），再字面 $HOME/~（部分环境由 FS 层展开）
+    var BILI_CONFIG_DEFAULT_PATH = "/root/.config/billion-context/billion-context.json";
+    var BILI_CONFIG_CANDIDATES = [
+        "/root/.config/billion-context/billion-context.json",
+        "$HOME/.config/billion-context/billion-context.json",
+        "~/.config/billion-context/billion-context.json"
+    ];
 
     function resolveBiliConfigPath(customPath) {
         var explicit = firstNonBlank(customPath, "");
         if (explicit) {
             return explicit;
         }
-        // BILI_CONFIG_FILE 环境变量优先（与 billion-context 官方一致）
-        var envPath = firstNonBlank(process.env && process.env.BILI_CONFIG_FILE, "");
-        if (envPath) {
-            return envPath;
-        }
+        // 注：Operit JS 沙箱（QuickJS）无 process 全局，BILI_CONFIG_FILE 只能通过 config_file 参数显式传入
         return BILI_CONFIG_DEFAULT_PATH;
     }
 
+    // 探测真实存在的配置文件路径（read/write 共用；先 exists 后 read，避免 $HOME 字面量读不到）
+    async function probeBiliConfigPath(customPath) {
+        var preferred = resolveBiliConfigPath(customPath);
+        var candidates = [preferred];
+        if (customPath) {
+            return preferred; // 显式指定路径，直接用
+        }
+        for (var i = 0; i < BILI_CONFIG_CANDIDATES.length; i++) {
+            var c = BILI_CONFIG_CANDIDATES[i];
+            if (candidates.indexOf(c) < 0) {
+                candidates.push(c);
+            }
+        }
+        for (var j = 0; j < candidates.length; j++) {
+            try {
+                var existsResult = await Tools.Files.exists(candidates[j], "linux");
+                var exists = !!(existsResult && (existsResult.exists === true || existsResult.success === true));
+                if (exists) {
+                    return candidates[j];
+                }
+            } catch (_error) {
+                // 尝试下一个候选
+            }
+        }
+        return preferred;
+    }
+
     async function readBiliConfigFile(configPath) {
-        var path = resolveBiliConfigPath(configPath);
+        var path = await probeBiliConfigPath(configPath);
         var existsResult = await Tools.Files.exists(path, "linux");
         var exists = !!(existsResult && (existsResult.exists === true || existsResult.success === true));
         if (!exists) {
@@ -1222,7 +1251,6 @@ const BiliManager = (function () {
         await Tools.Files.write(path, payload, false, "linux");
         return path;
     }
-
     /**
      * 点路径取值/赋值/删除。path 形如 "port" 或 "compress.minCompressRange"。
      * 返回 [ok, error, value]。
