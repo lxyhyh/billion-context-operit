@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "toolpkg_id": "com.operit.billion_context",
+  "version": "0.1.0",
+  "author": ["billion-context-operit"],
+  "main": "main.js",
+  "display_name": {
+    "zh": "billion-context 管理器",
+    "en": "billion-context Manager",
+    "default": "billion-context Manager"
+  },
+  "description": {
+    "zh": "在 Operit 的 Ubuntu/PRoot 容器中一键安装与管理官方原版 billion-context Proxy（仅启动器/管理器，不重新实现 billion-context 任何核心功能）。",
+    "en": "One-click install and manage the official billion-context Proxy inside Operit's Ubuntu/PRoot container (launcher/manager only, never reimplements billion-context).",
+    "default": "Install and manage the official billion-context Proxy inside Operit's Ubuntu/PRoot container."
+  },
+  "enabled_by_default": true,
+  "subpackages": [
+    {
+      "id": "bili_manager",
+      "entry": "packages/bili_manager.js",
+      "enabled_by_default": true,
+      "display_name": {
+        "zh": "billion-context 管理",
+        "en": "billion-context Manager"
+      },
+      "description": {
+        "zh": "检测/安装/启动/停止/重启/健康检查/更新/日志/Proxy URL 生成",
+        "en": "Detect, install, start, stop, restart, health-check, update, logs and proxy URL generation"
+      }
+    }
+  ]
+}
