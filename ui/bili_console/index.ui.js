@@ -371,12 +371,30 @@ function Screen(ctx) {
             return;
         }
         try {
-            if (ctx.setClipboard) {
-                await ctx.setClipboard(proxyUrl);
-            } else if (ctx.callTool) {
-                await serialCall("status", {});
+            var copied = false;
+            // Compose DSL 无原生 clipboard API → 用 Java bridge 写 Android 剪贴板
+            // （官方 message_insert 在 UI 上下文使用 Java.getApplicationContext() 的先例）
+            if (typeof Java !== "undefined" && Java && typeof Java.getApplicationContext === "function") {
+                try {
+                    var context = Java.getApplicationContext();
+                    var ClipboardManager = Java.type("android.content.ClipboardManager");
+                    var ClipData = Java.type("android.content.ClipData");
+                    var cm = context.getSystemService("clipboard");
+                    if (cm) {
+                        cm.setPrimaryClip(ClipData.newPlainText("bili_proxy_url", proxyUrl));
+                        copied = true;
+                    }
+                } catch (javaErr) {
+                    copied = false;
+                }
             }
-            setLastMsg("Proxy URL 已复制（可长按输入框粘贴到 Provider Base URL）");
+            if (copied) {
+                setLastMsg("Proxy URL 已复制到剪贴板（可粘贴到 Provider Base URL）");
+            } else {
+                setLastMsg("当前环境不支持自动复制，请长按下方 Proxy URL 手动选择复制");
+                setLastError("");
+                return;
+            }
             setLastError("");
         } catch (error) {
             setLastError(toErrorText(error));
@@ -473,12 +491,14 @@ function Screen(ctx) {
             }),
             UI.Button({ text: "读取", onClick: doLogs, enabled: !busy })
         ]),
-        UI.Text({
-            text: logText ? logText.slice(-6000) : "点击「读取」查看 ~/.local/state/billion-context/bili.log 尾部",
-            color: "#AAAAAA",
-            fontSize: 11,
-            maxLines: 20
-        }),
+        UI.Card({ containerColor: "#141414", padding: 8 }, [
+            UI.Text({
+                text: logText ? logText.slice(-12000) : "点击「读取」查看 ~/.local/state/billion-context/bili.log 尾部",
+                color: "#AAAAAA",
+                fontSize: 11,
+                maxLines: 60
+            })
+        ]),
 
         // 忙碌指示
         busy ? UI.Row({ spacing: 8, verticalAlignment: "center" }, [
