@@ -420,31 +420,39 @@ function Screen(ctx) {
 
         // 状态卡片（加大间距，信息分块）
         UI.Card({ containerColor: "#1E1E1E", padding: 16 }, [
-            // 核心状态：大字醒目
-            UI.Row({ verticalAlignment: "center", spacing: 10 }, [
+            // 核心状态：大字醒目，左右分布
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
                 UI.Text({ text: "状态", color: "#BBBBBB", fontSize: 15, bold: true }),
-                UI.Text({ text: statusText, color: statusColor, bold: true, fontSize: 20 }),
-                UI.Text({ text: healthy === true ? "✓ ok=true" : "", color: "#4CAF50", fontSize: 14, bold: true })
+                UI.Row({ verticalAlignment: "center", spacing: 10 }, [
+                    UI.Text({ text: statusText, color: statusColor, bold: true, fontSize: 20 }),
+                    UI.Text({ text: healthy === true ? "✓ ok=true" : "", color: "#4CAF50", fontSize: 14, bold: true })
+                ])
             ]),
             UI.Spacer({ height: 12 }),
 
-            // 安装 / 版本
-            UI.Row({ spacing: 8 }, [
-                UI.Text({ text: "安装:", color: "#AAAAAA", fontSize: 14 }),
-                UI.Text({ text: installedText, color: installed === true ? "#4CAF50" : "#FF9800", fontSize: 14, bold: true }),
-                UI.Spacer({ width: 16 }),
-                UI.Text({ text: "版本:", color: "#AAAAAA", fontSize: 14 }),
-                UI.Text({ text: biliVersion || "--", color: "#FFFFFF", fontSize: 14, bold: true })
+            // 安装 / 版本（左右分布）
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "安装:", color: "#AAAAAA", fontSize: 14 }),
+                    UI.Text({ text: installedText, color: installed === true ? "#4CAF50" : "#FF9800", fontSize: 14, bold: true })
+                ]),
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "版本:", color: "#AAAAAA", fontSize: 14 }),
+                    UI.Text({ text: biliVersion || "--", color: "#FFFFFF", fontSize: 14, bold: true })
+                ])
             ]),
             UI.Spacer({ height: 10 }),
 
-            // Node / npm
-            UI.Row({ spacing: 8 }, [
-                UI.Text({ text: "Node:", color: "#AAAAAA", fontSize: 13 }),
-                UI.Text({ text: nodeVersion || "--", color: "#DDDDDD", fontSize: 13 }),
-                UI.Spacer({ width: 16 }),
-                UI.Text({ text: "npm:", color: "#AAAAAA", fontSize: 13 }),
-                UI.Text({ text: npmVersion || "--", color: "#DDDDDD", fontSize: 13 })
+            // Node / npm（左右分布）
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "Node:", color: "#AAAAAA", fontSize: 13 }),
+                    UI.Text({ text: nodeVersion || "--", color: "#DDDDDD", fontSize: 13 })
+                ]),
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "npm:", color: "#AAAAAA", fontSize: 13 }),
+                    UI.Text({ text: npmVersion || "--", color: "#DDDDDD", fontSize: 13 })
+                ])
             ]),
             UI.Spacer({ height: 10 }),
 
@@ -455,13 +463,16 @@ function Screen(ctx) {
             ]),
             UI.Spacer({ height: 10 }),
 
-            // 端口 / PID
-            UI.Row({ spacing: 8 }, [
-                UI.Text({ text: "端口:", color: "#AAAAAA", fontSize: 13 }),
-                UI.Text({ text: port || "8787", color: "#DDDDDD", fontSize: 13, bold: true }),
-                UI.Spacer({ width: 16 }),
-                UI.Text({ text: "PID:", color: "#AAAAAA", fontSize: 13 }),
-                UI.Text({ text: pid === null ? "--" : String(pid), color: "#DDDDDD", fontSize: 13 })
+            // 端口 / PID（左右分布）
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "端口:", color: "#AAAAAA", fontSize: 13 }),
+                    UI.Text({ text: port || "8787", color: "#DDDDDD", fontSize: 13, bold: true })
+                ]),
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "PID:", color: "#AAAAAA", fontSize: 13 }),
+                    UI.Text({ text: pid === null ? "--" : String(pid), color: "#DDDDDD", fontSize: 13 })
+                ])
             ]),
             UI.Spacer({ height: 10 }),
 
@@ -474,16 +485,20 @@ function Screen(ctx) {
             })
         ]),
 
-        // 操作按钮
-        UI.Row({ spacing: 8 }, [
+        // 操作按钮（每行 2 个，spaceBetween 两端分布）
+        UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
             UI.Button({ text: "刷新", onClick: refreshAll, enabled: !busy }),
-            UI.Button({ text: "检测", onClick: doDetect, enabled: !busy }),
+            UI.Button({ text: "检测", onClick: doDetect, enabled: !busy })
+        ]),
+        UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
             UI.Button({ text: "安装", onClick: doInstall, enabled: !busy && installed !== true }),
             UI.Button({ text: "更新", onClick: doUpdate, enabled: !busy && installed === true })
         ]),
-        UI.Row({ spacing: 8 }, [
+        UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
             UI.Button({ text: "启动", onClick: doStart, enabled: !busy && healthy !== true && installed === true }),
-            UI.Button({ text: "停止", onClick: doStop, enabled: !busy && running === true }),
+            UI.Button({ text: "停止", onClick: doStop, enabled: !busy && running === true })
+        ]),
+        UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
             UI.Button({ text: "重启", onClick: doRestart, enabled: !busy && installed === true }),
             UI.Button({ text: "健康检查", onClick: doHealth, enabled: !busy })
         ]),
