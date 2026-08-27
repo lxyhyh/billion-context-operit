@@ -419,9 +419,9 @@ function Screen(ctx) {
         UI.Text({ text: "billion-context 管理器", fontSize: 20, bold: true }),
 
         // 状态卡片（加大间距，信息分块）
-        UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 16 }, [
+        UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 20 }, [
             // 核心状态：大字醒目，左右分布
-            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
                 UI.Text({ text: "状态", color: "#BBBBBB", fontSize: 15, bold: true }),
                 UI.Row({ verticalAlignment: "center", spacing: 10 }, [
                     UI.Text({ text: statusText, color: statusColor, bold: true, fontSize: 20 }),
@@ -431,7 +431,7 @@ function Screen(ctx) {
             UI.Spacer({ height: 12 }),
 
             // 安装 / 版本（左右分布）
-            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
                 UI.Row({ spacing: 8, verticalAlignment: "center" }, [
                     UI.Text({ text: "安装:", color: "#AAAAAA", fontSize: 14 }),
                     UI.Text({ text: installedText, color: installed === true ? "#4CAF50" : "#FF9800", fontSize: 14, bold: true })
@@ -444,7 +444,7 @@ function Screen(ctx) {
             UI.Spacer({ height: 10 }),
 
             // Node / npm（左右分布）
-            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
                 UI.Row({ spacing: 8, verticalAlignment: "center" }, [
                     UI.Text({ text: "Node:", color: "#AAAAAA", fontSize: 13 }),
                     UI.Text({ text: nodeVersion || "--", color: "#DDDDDD", fontSize: 13 })
@@ -464,7 +464,7 @@ function Screen(ctx) {
             UI.Spacer({ height: 10 }),
 
             // 端口 / PID（左右分布）
-            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceBetween" }, [
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
                 UI.Row({ spacing: 8, verticalAlignment: "center" }, [
                     UI.Text({ text: "端口:", color: "#AAAAAA", fontSize: 13 }),
                     UI.Text({ text: port || "8787", color: "#DDDDDD", fontSize: 13, bold: true })
