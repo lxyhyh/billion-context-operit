@@ -1,0 +1,79 @@
+# billion-context-operit
+
+在 Operit 内置 Ubuntu/PRoot 容器中**一键安装与管理官方原版 billion-context Proxy** 的 ToolPkg。
+
+> **本插件只是 Launcher / Manager。** billion-context 是真正的 Context Engine，ACP（压缩/搜索/session）全部由官方 Proxy 自己完成。本插件**不重新实现** billion-context 的任何核心功能，不注册任何 Prompt/Message/ToolCompose Hook，不把 ACP 工具注入 Operit，不保存 API Key。
+
+## 最终运行架构
+
+```
+Operit
+  ↓ Provider Base URL
+  ↓ http://127.0.0.1:8787/bili/<upstream>
+  ↓ billion-context Proxy（本插件安装/管理）
+  ↓ acp-kernel
+  ↓ 真实 Provider
+```
+
+Operit 不需要知道 ACP。
+
+## 功能（第一阶段）
+
+| 工具 | 说明 |
+|---|---|
+| `detect` | 检测 node / npm / bili 版本与路径 |
+| `install` | bili 缺失时 `npm install -g billion-context`，装后验证 `bili --version`；node/npm 缺失则报告缺 Node runtime（不自行下载） |
+| `start` | `nohup setsid bili --host 127.0.0.1 --port 8787` 后台启动，PID 写文件，轮询 `GET /__bili/health` 直到 `{"ok":true,...}` |
+| `stop` | 按 PID 文件精确停止（进程组），无 PID 时按端口/进程名兜底，确认 health 失败 |
+| `restart` | stop + start |
+| `status` | 进程/PID/health/版本/端口/日志存在性 |
+| `health` | 探测 `/__bili/health`，仅 `ok=true` 报告 healthy |
+| `version` | bili 版本、bili 路径、node/npm 版本 |
+| `update` | 官方 `bili update` |
+| `logs` | 官方 `~/.local/state/billion-context/bili.log` 尾部（默认 200 行，最多 800） |
+| `proxy_url` | 输入 upstream_base_url → `http://127.0.0.1:<port>/bili/<原 URL>`（不 encode 整个 URL，不追加任何 endpoint） |
+
+## UI（Compose DSL 管理面板）
+
+- 安装状态 / 运行状态 / 版本 / 端口 / PID / health 响应
+- 启动 / 停止 / 重启 / 安装 / 更新 / 健康检查 / 刷新 / 检测
+- 日志读取入口（行数可调）
+- upstream URL 输入 → Proxy URL 生成 / 复制
+- UI 不自行维护服务状态，全部通过工具读取真实状态
+
+## 使用
+
+1. 安装插件（`.toolpkg` 导入或 `debug_install_toolpkg`），**重启 Operit**。
+2. 打开工具箱「billion-context 管理」。
+3. 点击「检测」确认 node/npm/bili 情况 → 点击「安装」（仅首次）。
+4. 点击「启动」，等待健康检查通过（显示 `ok=true`）。
+5. 在输入框填入 upstream Base URL（如 `https://api.openai.com/v1`），点击「生成」得到 Proxy URL。
+6. 在 Operit Provider 设置中，把 Base URL 改为生成的 Proxy URL，API Key 保持原样。
+7. 正常对话即可；长上下文时 billion-context 自行注入 ACP 并让模型主动 compress。
+
+## 验收闭环
+
+安装插件 → 点击安装 → 点击启动 → 健康检查成功 → Provider Base URL 改成 Proxy URL → 正常对话 → 长上下文时 billion-context 自己注入 ACP 并让模型主动 compress。
+
+## 架构约束（严格遵守）
+
+- 不重新实现 billion-context；不嵌入 acp-kernel。
+- 不注册 PromptFinalizeHook / PromptEstimateFinalizeHook / SystemPromptComposeHook / ToolPromptComposeHook / MessageProcessingPlugin。
+- 不把 compress / decompress / search_context / acp_status 注册为 Operit Tool。
+- 不修改 Operit Kotlin；不使用反射 / Proxy / MITM / 网络 hook。
+- 终端仅用 `Tools.System.terminal`（visible session），服务进程 `nohup setsid` 脱离 terminal 生命周期，健康以 HTTP 为准。
+
+## 开发
+
+```bash
+# 校验
+node --check packages/bili_manager.js
+node --check ui/bili_console/index.ui.js
+node --check main.js
+node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
+
+# 打包
+bash scripts/build.sh
+```
+
+产物：`dist/com.operit.billion_context-v0.1.0.toolpkg`
