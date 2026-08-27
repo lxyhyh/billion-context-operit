@@ -418,20 +418,60 @@ function Screen(ctx) {
         // 标题
         UI.Text({ text: "billion-context 管理器", fontSize: 20, bold: true }),
 
-        // 状态卡片
-        UI.Card({ containerColor: "#1E1E1E", padding: 12 }, [
-            UI.Row({ verticalAlignment: "center", spacing: 8 }, [
-                UI.Text({ text: "状态: ", color: "#BBBBBB" }),
-                UI.Text({ text: statusText, color: statusColor, bold: true }),
-                UI.Text({ text: healthy === true ? " ✓ ok=true" : "", color: "#4CAF50", fontSize: 12 })
+        // 状态卡片（加大间距，信息分块）
+        UI.Card({ containerColor: "#1E1E1E", padding: 16 }, [
+            // 核心状态：大字醒目
+            UI.Row({ verticalAlignment: "center", spacing: 10 }, [
+                UI.Text({ text: "状态", color: "#BBBBBB", fontSize: 15, bold: true }),
+                UI.Text({ text: statusText, color: statusColor, bold: true, fontSize: 20 }),
+                UI.Text({ text: healthy === true ? "✓ ok=true" : "", color: "#4CAF50", fontSize: 14, bold: true })
             ]),
-            UI.Spacer({ height: 4 }),
-            UI.Text({ text: "安装: " + installedText + "   版本: " + (biliVersion || "--"), color: "#CCCCCC", fontSize: 13 }),
-            UI.Text({ text: "Node: " + (nodeVersion || "--") + "   npm: " + (npmVersion || "--"), color: "#999999", fontSize: 12 }),
-            UI.Text({ text: "bili 路径: " + (biliPath || "--"), color: "#999999", fontSize: 12 }),
-            UI.Text({ text: "端口: " + (port || "8787") + "  PID: " + (pid === null ? "--" : pid), color: "#999999", fontSize: 12 }),
-            UI.Spacer({ height: 4 }),
-            UI.Text({ text: healthBody ? "health: " + healthBody.slice(0, 120) : "", color: "#777777", fontSize: 11, maxLines: 2 })
+            UI.Spacer({ height: 12 }),
+
+            // 安装 / 版本
+            UI.Row({ spacing: 8 }, [
+                UI.Text({ text: "安装:", color: "#AAAAAA", fontSize: 14 }),
+                UI.Text({ text: installedText, color: installed === true ? "#4CAF50" : "#FF9800", fontSize: 14, bold: true }),
+                UI.Spacer({ width: 16 }),
+                UI.Text({ text: "版本:", color: "#AAAAAA", fontSize: 14 }),
+                UI.Text({ text: biliVersion || "--", color: "#FFFFFF", fontSize: 14, bold: true })
+            ]),
+            UI.Spacer({ height: 10 }),
+
+            // Node / npm
+            UI.Row({ spacing: 8 }, [
+                UI.Text({ text: "Node:", color: "#AAAAAA", fontSize: 13 }),
+                UI.Text({ text: nodeVersion || "--", color: "#DDDDDD", fontSize: 13 }),
+                UI.Spacer({ width: 16 }),
+                UI.Text({ text: "npm:", color: "#AAAAAA", fontSize: 13 }),
+                UI.Text({ text: npmVersion || "--", color: "#DDDDDD", fontSize: 13 })
+            ]),
+            UI.Spacer({ height: 10 }),
+
+            // bili 路径
+            UI.Row({ spacing: 8 }, [
+                UI.Text({ text: "bili 路径:", color: "#AAAAAA", fontSize: 13 }),
+                UI.Text({ text: biliPath || "--", color: "#DDDDDD", fontSize: 13, maxLines: 1, overflow: "ellipsis" })
+            ]),
+            UI.Spacer({ height: 10 }),
+
+            // 端口 / PID
+            UI.Row({ spacing: 8 }, [
+                UI.Text({ text: "端口:", color: "#AAAAAA", fontSize: 13 }),
+                UI.Text({ text: port || "8787", color: "#DDDDDD", fontSize: 13, bold: true }),
+                UI.Spacer({ width: 16 }),
+                UI.Text({ text: "PID:", color: "#AAAAAA", fontSize: 13 }),
+                UI.Text({ text: pid === null ? "--" : String(pid), color: "#DDDDDD", fontSize: 13 })
+            ]),
+            UI.Spacer({ height: 10 }),
+
+            // health 响应
+            UI.Text({
+                text: healthBody ? "health: " + healthBody.slice(0, 200) : "health: （未探测）",
+                color: "#777777",
+                fontSize: 12,
+                maxLines: 2
+            })
         ]),
 
         // 操作按钮
