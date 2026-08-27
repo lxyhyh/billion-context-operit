@@ -7,7 +7,16 @@
  */
 "use strict";
 
-const biliConsoleUI = require("./ui/bili_console/index.ui.js").default;
+// 对齐官方范本（linux_ssh/remote_operit/worldbook）：
+// require 后不提前解包 .default，把整个模块对象传给 screen，
+// 让 normalizeScreenField 能拿到带 __operit_toolpkg_module_path 标记的可序列化引用。
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.registerToolPkg = registerToolPkg;
+
+const biliConsoleUI = __importDefault(require("./ui/bili_console/index.ui.js"));
 
 function registerToolPkg() {
     ToolPkg.registerToolboxUiModule({
@@ -48,5 +57,3 @@ function registerToolPkg() {
 
     return true;
 }
-
-exports.registerToolPkg = registerToolPkg;

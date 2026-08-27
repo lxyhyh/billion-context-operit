@@ -8,6 +8,7 @@
  * 4. 异步 setState 不触发重绘 → 关键操作在 onClick/onLoad 的 await 链内完成。
  */
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 
 function Screen(ctx) {
     const UI = ctx.UI;
