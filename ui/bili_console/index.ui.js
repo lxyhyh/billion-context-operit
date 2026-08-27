@@ -448,26 +448,6 @@ function Screen(ctx) {
             UI.Button({ text: "健康检查", onClick: doHealth, enabled: !busy })
         ]),
 
-        // 日志
-        UI.Row({ spacing: 8, verticalAlignment: "center" }, [
-            UI.Text({ text: "日志（官方 bili.log 尾部）", fontSize: 16, bold: true }),
-            UI.TextField({
-                value: logLines,
-                onValueChange: setLogLines,
-                label: "行数",
-                singleLine: true
-            }),
-            UI.Button({ text: "读取", onClick: doLogs, enabled: !busy })
-        ]),
-        UI.Card({ containerColor: "#141414", padding: 8 }, [
-            UI.Text({
-                text: logText ? logText.slice(-12000) : "点击「读取」查看 ~/.local/state/billion-context/bili.log 尾部",
-                color: "#AAAAAA",
-                fontSize: 11,
-                maxLines: 60
-            })
-        ]),
-
         // 端口/主机
         UI.Row({ spacing: 8, verticalAlignment: "center" }, [
             UI.Text({ text: "端口", color: "#AAAAAA", fontSize: 12 }),
@@ -499,6 +479,27 @@ function Screen(ctx) {
             fontSize: 12,
             maxLines: 4
         }),
+
+        // 日志
+        UI.Text({ text: "日志（官方 bili.log 尾部）", fontSize: 16, bold: true }),
+        UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+            UI.TextField({
+                value: logLines,
+                onValueChange: setLogLines,
+                label: "行数",
+                singleLine: true,
+                width: 100
+            }),
+            UI.Button({ text: "读取", onClick: doLogs, enabled: !busy })
+        ]),
+        UI.Card({ containerColor: "#141414", padding: 8 }, [
+            UI.Text({
+                text: logText ? logText.slice(-12000) : "点击「读取」查看 ~/.local/state/billion-context/bili.log 尾部",
+                color: "#AAAAAA",
+                fontSize: 11,
+                maxLines: 60
+            })
+        ]),
 
         // 忙碌指示
         busy ? UI.Row({ spacing: 8, verticalAlignment: "center" }, [
