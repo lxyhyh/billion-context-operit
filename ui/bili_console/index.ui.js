@@ -456,8 +456,8 @@ function Screen(ctx) {
             ]),
             UI.Spacer({ height: 10 }),
 
-            // bili 路径
-            UI.Row({ spacing: 8 }, [
+            // bili 路径（撑满整行）
+            UI.Row({ fillMaxWidth: true, spacing: 8, paddingHorizontal: 8 }, [
                 UI.Text({ text: "bili 路径:", color: "#AAAAAA", fontSize: 13 }),
                 UI.Text({ text: biliPath || "--", color: "#DDDDDD", fontSize: 13, maxLines: 1, overflow: "ellipsis" })
             ]),
@@ -476,12 +476,14 @@ function Screen(ctx) {
             ]),
             UI.Spacer({ height: 10 }),
 
-            // health 响应
+            // health 响应（撑满整行）
             UI.Text({
                 text: healthBody ? "health: " + healthBody.slice(0, 200) : "health: （未探测）",
                 color: "#777777",
                 fontSize: 12,
-                maxLines: 2
+                maxLines: 2,
+                fillMaxWidth: true,
+                paddingHorizontal: 8
             })
         ]),
 
