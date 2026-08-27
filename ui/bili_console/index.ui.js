@@ -456,10 +456,15 @@ function Screen(ctx) {
             ]),
             UI.Spacer({ height: 10 }),
 
-            // bili 路径（撑满整行）
-            UI.Row({ fillMaxWidth: true, spacing: 8, paddingHorizontal: 8 }, [
-                UI.Text({ text: "bili 路径:", color: "#AAAAAA", fontSize: 13 }),
-                UI.Text({ text: biliPath || "--", color: "#DDDDDD", fontSize: 13, maxLines: 1, overflow: "ellipsis" })
+            // bili 路径（与其他行同缩进）
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "bili 路径:", color: "#AAAAAA", fontSize: 13 }),
+                    UI.Text({ text: biliPath || "--", color: "#DDDDDD", fontSize: 13, maxLines: 1, overflow: "ellipsis" })
+                ]),
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "", color: "#AAAAAA", fontSize: 13 })
+                ])
             ]),
             UI.Spacer({ height: 10 }),
 
@@ -476,15 +481,20 @@ function Screen(ctx) {
             ]),
             UI.Spacer({ height: 10 }),
 
-            // health 响应（撑满整行）
-            UI.Text({
-                text: healthBody ? "health: " + healthBody.slice(0, 200) : "health: （未探测）",
-                color: "#777777",
-                fontSize: 12,
-                maxLines: 2,
-                fillMaxWidth: true,
-                paddingHorizontal: 8
-            })
+            // health 响应（与其他行同缩进）
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({
+                        text: healthBody ? "health: " + healthBody.slice(0, 200) : "health: （未探测）",
+                        color: "#777777",
+                        fontSize: 12,
+                        maxLines: 2
+                    })
+                ]),
+                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                    UI.Text({ text: "", color: "#AAAAAA", fontSize: 13 })
+                ])
+            ])
         ]),
 
         // 操作按钮
