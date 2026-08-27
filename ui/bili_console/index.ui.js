@@ -432,11 +432,11 @@ function Screen(ctx) {
 
             // 安装 / 版本（左右分布）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "安装:", color: "#AAAAAA", fontSize: 14 }),
                     UI.Text({ text: installedText, color: installed === true ? "#4CAF50" : "#FF9800", fontSize: 14, bold: true })
                 ]),
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "版本:", color: "#AAAAAA", fontSize: 14 }),
                     UI.Text({ text: biliVersion || "--", color: "#FFFFFF", fontSize: 14, bold: true })
                 ])
@@ -445,11 +445,11 @@ function Screen(ctx) {
 
             // Node / npm（左右分布）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "Node:", color: "#AAAAAA", fontSize: 13 }),
                     UI.Text({ text: nodeVersion || "--", color: "#DDDDDD", fontSize: 13 })
                 ]),
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "npm:", color: "#AAAAAA", fontSize: 13 }),
                     UI.Text({ text: npmVersion || "--", color: "#DDDDDD", fontSize: 13 })
                 ])
@@ -458,11 +458,11 @@ function Screen(ctx) {
 
             // bili 路径（与其他行同缩进）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "bili 路径:", color: "#AAAAAA", fontSize: 13 }),
                     UI.Text({ text: biliPath || "--", color: "#DDDDDD", fontSize: 13, maxLines: 1, overflow: "ellipsis" })
                 ]),
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "", color: "#AAAAAA", fontSize: 13 })
                 ])
             ]),
@@ -470,11 +470,11 @@ function Screen(ctx) {
 
             // 端口 / PID（左右分布）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "端口:", color: "#AAAAAA", fontSize: 13 }),
                     UI.Text({ text: port || "8787", color: "#DDDDDD", fontSize: 13, bold: true })
                 ]),
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "PID:", color: "#AAAAAA", fontSize: 13 }),
                     UI.Text({ text: pid === null ? "--" : String(pid), color: "#DDDDDD", fontSize: 13 })
                 ])
@@ -483,7 +483,7 @@ function Screen(ctx) {
 
             // health 响应（与其他行同缩进）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({
                         text: healthBody ? "health: " + healthBody.slice(0, 200) : "health: （未探测）",
                         color: "#777777",
@@ -491,7 +491,7 @@ function Screen(ctx) {
                         maxLines: 2
                     })
                 ]),
-                UI.Row({ spacing: 8, verticalAlignment: "center" }, [
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "", color: "#AAAAAA", fontSize: 13 })
                 ])
             ])
