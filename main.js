@@ -19,6 +19,10 @@ exports.registerToolPkg = registerToolPkg;
 const biliConsoleUI = __importDefault(require("./ui/bili_console/index.ui.js"));
 
 function registerToolPkg() {
+    // 只用 registerToolboxUiModule（官方 linux_ssh 范本）：
+    // 它会自动映射为一个 UI route 并自动挂载 toolbox 入口。
+    // 不要再额外 registerUiRoute / registerNavigationEntry 指向同一 UI，
+    // 否则报 "Duplicate toolpkg route id"（packageLogs 实锤 2026-08-27）。
     ToolPkg.registerToolboxUiModule({
         id: "bili_console",
         runtime: "compose_dsl",
@@ -29,30 +33,6 @@ function registerToolPkg() {
             en: "billion-context Manager",
             default: "billion-context Manager"
         }
-    });
-
-    ToolPkg.registerUiRoute({
-        id: "bili_console_route",
-        route: "toolpkg:com.operit.billion_context:ui:bili_console",
-        runtime: "compose_dsl",
-        screen: biliConsoleUI,
-        title: {
-            zh: "billion-context 管理",
-            en: "billion-context Manager",
-            default: "billion-context Manager"
-        }
-    });
-
-    ToolPkg.registerNavigationEntry({
-        id: "bili_console_entry",
-        route: "toolpkg:com.operit.billion_context:ui:bili_console",
-        surface: "main_sidebar_plugins",
-        title: {
-            zh: "billion-context",
-            en: "billion-context",
-            default: "billion-context"
-        },
-        order: 50
     });
 
     return true;
