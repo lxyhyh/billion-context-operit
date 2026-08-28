@@ -34,7 +34,6 @@
    - 长表单必须用 `LazyColumn`（Column 不可滚动）。
 3. **提交信息**：`feat:` / `fix:` / `chore:` / `docs:` 前缀 + 中文描述。
 4. **改 UI 后必须重启 Operit**：UI 注册是应用启动时的快照，不重启会出现新旧 UI 混合。
-5. **产物复制**：需要交付的产物（如 `.toolpkg`）复制到 `/sdcard/Download/`。
 
 ## 验证
 
