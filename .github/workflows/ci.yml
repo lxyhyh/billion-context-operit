@@ -25,8 +25,28 @@ jobs:
       - name: Manifest validation
         run: node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest OK')"
 
-      - name: Package build
-        run: bash scripts/build.sh
+      - name: Tool consistency check
+        run: |
+          node -e "
+            const src = require('fs').readFileSync('src/packages/bili_manager.js','utf8');
+            const meta = JSON.parse(src.match(/\/\* METADATA\s*([\s\S]*?)\*\//)[1]);
+            const toolNames = meta.tools.map(t => t.name);
+            const exportsNames = src.match(/^exports\.(\w+)/gm).map(l => l.split('.')[1].split('=')[0].trim());
+            const missing = toolNames.filter(n => !exportsNames.includes(n));
+            const extra = exportsNames.filter(n => !toolNames.includes(n));
+            if (missing.length || extra.length) {
+              console.error('工具注册不一致! missing=' + missing + ' extra=' + extra);
+              process.exit(1);
+            }
+            console.log('✓ 工具注册一致性 OK (' + toolNames.length + '/' + exportsNames.length + ')');
+          "
+
+      - name: Package
+        run: |
+          VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('manifest.json','utf8')).version)")
+          PKG_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('manifest.json','utf8')).toolpkg_id)")
+          mkdir -p dist
+          zip -rq "dist/${PKG_ID}-v${VERSION}.toolpkg" manifest.json src
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

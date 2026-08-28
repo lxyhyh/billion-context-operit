@@ -6,3 +6,5 @@ node_modules/
 # 系统文件
 .DS_Store
 Thumbs.db
+# 本地构建脚本（保留在本地，不上传 GitHub）
+scripts/build.sh
