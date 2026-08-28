@@ -475,7 +475,7 @@ function Screen(ctx) {
     return UI.LazyColumn({
         fillMaxSize: true,
         padding: 16,
-        spacing: 10
+        spacing: 8
     }, [
         // 配置路径（独立小字，无卡片背景，不被遮挡）
         UI.Text({
@@ -484,7 +484,6 @@ function Screen(ctx) {
             color: "onSurfaceVariant",
             softWrap: true
         }),
-        UI.Spacer({ height: 8 }),
 
         // 操作按钮（无包裹卡片，3+2 两行均分）
         UI.Row({ spacing: 8 }, [
@@ -492,7 +491,6 @@ function Screen(ctx) {
             UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary, weight: 1 }),
             UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary, weight: 1 })
         ]),
-        UI.Spacer({ height: 8 }),
         UI.Row({ spacing: 8 }, [
             UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError, weight: 1 }),
             UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded, weight: 1 })
