@@ -10,5 +10,5 @@
 ## 测试
 
 - [ ] `node --check` 全部通过
-- [ ] `bash scripts/build.sh` 通过（工具一致性自查 16/16）
+- [ ] 本地 `bash scripts/build.sh` 或云端 CI 通过（工具一致性自查 16/16）
 - [ ] 已在 Operit 中安装验证

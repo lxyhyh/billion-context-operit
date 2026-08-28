@@ -16,12 +16,12 @@ src/
   ui/bili_console/         # 管理页 UI
   ui/bili_config/          # 配置页 UI
 manifest.json              # 包清单（版本号在此维护）
-scripts/build.sh           # 打包脚本
+scripts/build.sh           # 本地打包脚本（仅本地，不上传；云端 CI 内联相同逻辑）
 ```
 
 ## 规则
 
-1. **新增工具必须同步**：`packages/bili_manager.js` 顶部的 `METADATA` 与底部 `exports.xxx` 必须成对出现，否则工具静默不注册（build.sh 有 16/16 一致性自查）。
+1. **新增工具必须同步**：`packages/bili_manager.js` 顶部的 `METADATA` 与底部 `exports.xxx` 必须成对出现，否则工具静默不注册（本地 `bash scripts/build.sh` 与云端 CI 均有 16/16 一致性自查）。
 2. **UI 铁律**（来自踩坑记录）：
    - `render` 必须纯函数，`setState` 只在 action 窗口（onLoad/onClick async handler）。
    - 所有 `ctx.callTool` 走全局串行队列（bridge 并发响应错配免疫）。
@@ -35,7 +35,7 @@ scripts/build.sh           # 打包脚本
 ## 提交前检查
 
 ```bash
-bash scripts/build.sh   # 全绿（语法 + manifest + 工具一致性）
+bash scripts/build.sh   # 本地：全绿（语法 + manifest + 工具一致性）；云端：push 后 CI 自动执行
 ```
 
 ## License

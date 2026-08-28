@@ -82,8 +82,8 @@ src/
   ui/bili_console/         # 管理页 UI
   ui/bili_config/          # 配置页 UI
 manifest.json              # 包清单（版本号在此维护）
-scripts/build.sh           # 打包脚本
-.github/workflows/ci.yml   # CI
+scripts/build.sh           # 本地打包脚本（仅本地，不上传）
+.github/workflows/ci.yml   # CI（云端构建）
 LICENSE / CHANGELOG.md / CONTRIBUTING.md / SECURITY.md
 ```
 
