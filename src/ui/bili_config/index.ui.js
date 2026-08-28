@@ -554,7 +554,8 @@ function Screen(ctx) {
             fieldRow(field("upstream")),
             fieldRow(field("debug")),
             fieldRow(field("autoUpdate")),
-            fieldRow(field("passthrough"))
+            fieldRow(field("passthrough")),
+            fieldRow(field("autoStart"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
             UI.Text({ text: "上下文压缩", style: "titleSmall", color: "primary", fontWeight: "bold", softWrap: true }),
