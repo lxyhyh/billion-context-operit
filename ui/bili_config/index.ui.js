@@ -431,23 +431,49 @@ function Screen(ctx) {
             ]);
         }
         if (f.type === "select") {
+            const options = f.options || [];
             return UI.Column({ fillMaxWidth: true }, [
                 UI.Text({ text: f.label, color: "#FFFFFF", fontSize: 14, bold: true }),
                 UI.Text({ text: f.desc, color: "#888888", fontSize: 11, maxLines: 3 }),
                 UI.Spacer({ height: 6 }),
-                UI.Row({ spacing: 8 }, (f.options || []).map(function (opt) {
-                    const selected = asText(value) === opt;
-                    return UI.Button({
-                        text: opt,
-                        onClick: function () {
-                            const next = Object.assign({}, form);
-                            next[f.path] = opt;
-                            setForm(next);
-                        },
-                        containerColor: selected ? "#2E7D32" : "#333333",
-                        contentColor: selected ? "#FFFFFF" : "#CCCCCC"
-                    });
-                }))
+                UI.Row({ spacing: 8 }, [
+                    options.indexOf("enabled") >= 0
+                        ? UI.Button({
+                            text: "enabled",
+                            onClick: function () {
+                                const next = Object.assign({}, form);
+                                next[f.path] = "enabled";
+                                setForm(next);
+                            },
+                            containerColor: asText(value) === "enabled" ? "#2E7D32" : "#333333",
+                            contentColor: asText(value) === "enabled" ? "#FFFFFF" : "#CCCCCC"
+                        })
+                        : UI.Spacer({ height: 0 }),
+                    options.indexOf("disabled") >= 0
+                        ? UI.Button({
+                            text: "disabled",
+                            onClick: function () {
+                                const next = Object.assign({}, form);
+                                next[f.path] = "disabled";
+                                setForm(next);
+                            },
+                            containerColor: asText(value) === "disabled" ? "#2E7D32" : "#333333",
+                            contentColor: asText(value) === "disabled" ? "#FFFFFF" : "#CCCCCC"
+                        })
+                        : UI.Spacer({ height: 0 }),
+                    options.indexOf("auto") >= 0
+                        ? UI.Button({
+                            text: "auto",
+                            onClick: function () {
+                                const next = Object.assign({}, form);
+                                next[f.path] = "auto";
+                                setForm(next);
+                            },
+                            containerColor: asText(value) === "auto" ? "#2E7D32" : "#333333",
+                            contentColor: asText(value) === "auto" ? "#FFFFFF" : "#CCCCCC"
+                        })
+                        : UI.Spacer({ height: 0 })
+                ])
             ]);
         }
         // number / text / csv
@@ -475,14 +501,147 @@ function Screen(ctx) {
         ]);
     }
 
+    // ---------- provider 行渲染（静态，固定下标） ----------
+    function providerRow(idx) {
+        const row = providers[idx];
+        if (!row) {
+            // 空行也渲染占位卡片，保证布局稳定
+            return UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 10 }, [
+                UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
+                    UI.Text({ text: "#" + (idx + 1), color: "#4FC3F7", fontSize: 12, bold: true }),
+                    UI.Spacer({ width: 8 }),
+                    UI.Button({
+                        text: "删除",
+                        onClick: function () {
+                            const next = providers.slice();
+                            next.splice(idx, 1);
+                            setProviders(next);
+                        },
+                        containerColor: "#B71C1C",
+                        contentColor: "#FFFFFF"
+                    })
+                ]),
+                UI.Spacer({ height: 6 }),
+                UI.TextField({
+                    value: "",
+                    onValueChange: function (v) {
+                        const next = providers.slice();
+                        while (next.length <= idx) {
+                            next.push({ url: "", proxy: "", context: "" });
+                        }
+                        next[idx] = Object.assign({}, next[idx], { url: v });
+                        setProviders(next);
+                    },
+                    label: "上游 URL",
+                    placeholder: "https://api.example.com/v1",
+                    singleLine: true,
+                    fillMaxWidth: true
+                }),
+                UI.Spacer({ height: 6 }),
+                UI.TextField({
+                    value: "",
+                    onValueChange: function (v) {
+                        const next = providers.slice();
+                        while (next.length <= idx) {
+                            next.push({ url: "", proxy: "", context: "" });
+                        }
+                        next[idx] = Object.assign({}, next[idx], { proxy: v });
+                        setProviders(next);
+                    },
+                    label: "代理（可空）",
+                    placeholder: "http://127.0.0.1:7890",
+                    singleLine: true,
+                    fillMaxWidth: true
+                }),
+                UI.Spacer({ height: 6 }),
+                UI.TextField({
+                    value: "",
+                    onValueChange: function (v) {
+                        const next = providers.slice();
+                        while (next.length <= idx) {
+                            next.push({ url: "", proxy: "", context: "" });
+                        }
+                        next[idx] = Object.assign({}, next[idx], { context: v });
+                        setProviders(next);
+                    },
+                    label: "模型 context（可空）",
+                    placeholder: "200000",
+                    singleLine: true,
+                    fillMaxWidth: true,
+                    keyboardType: "number"
+                })
+            ]);
+        }
+        return UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 10 }, [
+            UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
+                UI.Text({ text: "#" + (idx + 1), color: "#4FC3F7", fontSize: 12, bold: true }),
+                UI.Spacer({ width: 8 }),
+                UI.Button({
+                    text: "删除",
+                    onClick: function () {
+                        const next = providers.slice();
+                        next.splice(idx, 1);
+                        setProviders(next);
+                    },
+                    containerColor: "#B71C1C",
+                    contentColor: "#FFFFFF"
+                })
+            ]),
+            UI.Spacer({ height: 6 }),
+            UI.TextField({
+                value: row.url,
+                onValueChange: function (v) {
+                    const next = providers.slice();
+                    next[idx] = Object.assign({}, row, { url: v });
+                    setProviders(next);
+                },
+                label: "上游 URL",
+                placeholder: "https://api.example.com/v1",
+                singleLine: true,
+                fillMaxWidth: true
+            }),
+            UI.Spacer({ height: 6 }),
+            UI.TextField({
+                value: row.proxy,
+                onValueChange: function (v) {
+                    const next = providers.slice();
+                    next[idx] = Object.assign({}, row, { proxy: v });
+                    setProviders(next);
+                },
+                label: "代理（可空）",
+                placeholder: "http://127.0.0.1:7890",
+                singleLine: true,
+                fillMaxWidth: true
+            }),
+            UI.Spacer({ height: 6 }),
+            UI.TextField({
+                value: row.context,
+                onValueChange: function (v) {
+                    const next = providers.slice();
+                    next[idx] = Object.assign({}, row, { context: v });
+                    setProviders(next);
+                },
+                label: "模型 context（可空）",
+                placeholder: "200000",
+                singleLine: true,
+                fillMaxWidth: true,
+                keyboardType: "number"
+            })
+        ]);
+    }
+
     // ---------- render（纯函数） ----------
     const loaded = config !== null && typeof config === "object";
-    const groups = [
-        { title: "基础设置", fields: ["port", "host", "upstream", "debug", "autoUpdate", "passthrough"] },
-        { title: "上下文压缩", fields: ["compress.minCompressRange", "compress.modelContextLimit", "compress.maxContextLimit", "compress.emergencyThresholdPercent", "compress.nudgeGrowthTokens", "compress.preserveRecentMessages", "compress.preserveRecentTokens", "compress.tiers", "compress.injectTool", "compress.injectNudge"] },
-        { title: "MITM 抓包", fields: ["mitm.enabled", "mitm.domains"] },
-        { title: "提示缓存", fields: ["promptCache.routing"] }
-    ];
+
+    // 字段查找辅助（静态渲染，不用 map 展开动态子节点）
+    function field(path) {
+        for (let i = 0; i < FIELDS.length; i++) {
+            if (FIELDS[i].path === path) {
+                return FIELDS[i];
+            }
+        }
+        return null;
+    }
 
     return UI.LazyColumn({
         fillMaxSize: true,
@@ -509,81 +668,47 @@ function Screen(ctx) {
             ])
         ]),
 
-        // 字段分组
-        groups.map(function (group) {
-            const visibleFields = group.fields.filter(function (p) { return FIELDS.some(function (f) { return f.path === p; }); });
-            return UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-                UI.Text({ text: group.title, fontSize: 16, bold: true, color: "#4FC3F7" }),
-                visibleFields.map(function (p) {
-                    const f = FIELDS.find(function (x) { return x.path === p; });
-                    return f ? fieldRow(f) : null;
-                })
-            ]);
-        }),
+        // 字段分组 —— 静态直写（不使用 map 展开）
+        UI.Column({ fillMaxWidth: true, spacing: 8 }, [
+            UI.Text({ text: "基础设置", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            fieldRow(field("port")),
+            fieldRow(field("host")),
+            fieldRow(field("upstream")),
+            fieldRow(field("debug")),
+            fieldRow(field("autoUpdate")),
+            fieldRow(field("passthrough"))
+        ]),
+        UI.Column({ fillMaxWidth: true, spacing: 8 }, [
+            UI.Text({ text: "上下文压缩", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            fieldRow(field("compress.minCompressRange")),
+            fieldRow(field("compress.modelContextLimit")),
+            fieldRow(field("compress.maxContextLimit")),
+            fieldRow(field("compress.emergencyThresholdPercent")),
+            fieldRow(field("compress.nudgeGrowthTokens")),
+            fieldRow(field("compress.preserveRecentMessages")),
+            fieldRow(field("compress.preserveRecentTokens")),
+            fieldRow(field("compress.tiers")),
+            fieldRow(field("compress.injectTool")),
+            fieldRow(field("compress.injectNudge"))
+        ]),
+        UI.Column({ fillMaxWidth: true, spacing: 8 }, [
+            UI.Text({ text: "MITM 抓包", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            fieldRow(field("mitm.enabled")),
+            fieldRow(field("mitm.domains"))
+        ]),
+        UI.Column({ fillMaxWidth: true, spacing: 8 }, [
+            UI.Text({ text: "提示缓存", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            fieldRow(field("promptCache.routing"))
+        ]),
 
-        // Providers 管理
+        // Providers 管理 —— 静态渲染固定行（不使用 map 展开）
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
             UI.Text({ text: "Providers（按上游 URL 路由）", fontSize: 16, bold: true, color: "#4FC3F7" }),
             UI.Text({ text: "每条 = 一个上游 URL 及其专属代理 / 全局模型 context。留空 proxy/context 表示继承全局。保存后需点「重载配置」生效。", color: "#888888", fontSize: 11, maxLines: 3 }),
             UI.Spacer({ height: 4 }),
-            providers.map(function (row, idx) {
-                return UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 10 }, [
-                    UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
-                        UI.Text({ text: "#" + (idx + 1), color: "#4FC3F7", fontSize: 12, bold: true }),
-                        UI.Spacer({ width: 8 }),
-                        UI.Button({
-                            text: "删除",
-                            onClick: function () {
-                                const next = providers.slice();
-                                next.splice(idx, 1);
-                                setProviders(next);
-                            },
-                            containerColor: "#B71C1C",
-                            contentColor: "#FFFFFF"
-                        })
-                    ]),
-                    UI.Spacer({ height: 6 }),
-                    UI.TextField({
-                        value: row.url,
-                        onValueChange: function (v) {
-                            const next = providers.slice();
-                            next[idx] = Object.assign({}, row, { url: v });
-                            setProviders(next);
-                        },
-                        label: "上游 URL",
-                        placeholder: "https://api.example.com/v1",
-                        singleLine: true,
-                        fillMaxWidth: true
-                    }),
-                    UI.Spacer({ height: 6 }),
-                    UI.TextField({
-                        value: row.proxy,
-                        onValueChange: function (v) {
-                            const next = providers.slice();
-                            next[idx] = Object.assign({}, row, { proxy: v });
-                            setProviders(next);
-                        },
-                        label: "代理（可空）",
-                        placeholder: "http://127.0.0.1:7890",
-                        singleLine: true,
-                        fillMaxWidth: true
-                    }),
-                    UI.Spacer({ height: 6 }),
-                    UI.TextField({
-                        value: row.context,
-                        onValueChange: function (v) {
-                            const next = providers.slice();
-                            next[idx] = Object.assign({}, row, { context: v });
-                            setProviders(next);
-                        },
-                        label: "模型 context（可空）",
-                        placeholder: "200000",
-                        singleLine: true,
-                        fillMaxWidth: true,
-                        keyboardType: "number"
-                    })
-                ]);
-            }),
+            providerRow(0),
+            providerRow(1),
+            providerRow(2),
             UI.Spacer({ height: 4 }),
             UI.Button({
                 text: "+ 添加 Provider",
