@@ -6,7 +6,7 @@
 
 在 Operit 内置 Ubuntu/PRoot 容器中**一键安装与管理官方原版 billion-context Proxy** 的 ToolPkg。
 
-> **本插件只是 Launcher / Manager。** billion-context 是真正的 Context Engine，ACP（压缩/搜索/session）全部由官方 Proxy 自己完成。本插件**不重新实现** billion-context 的任何核心功能，不注册任何 Prompt/Message/ToolCompose Hook，不把 ACP 工具注入 Operit，不保存 API Key。
+> **本插件只是 Launcher / Manager。** billion-context 是真正的 Context Engine，ACP（压缩/搜索/session）全部由官方 Proxy 自己完成。本插件**不重新实现** billion-context 的任何核心功能，不保存 API Key。
 
 ## 最终运行架构
 
@@ -18,8 +18,6 @@ Operit
   ↓ acp-kernel
   ↓ 真实 Provider
 ```
-
-Operit 不需要知道 ACP。
 
 ## 功能
 
