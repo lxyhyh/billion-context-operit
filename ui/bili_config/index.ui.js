@@ -477,25 +477,26 @@ function Screen(ctx) {
         padding: 16,
         spacing: 10
     }, [
-        // 配置路径（独立小字，无卡片背景，不被遮挡）
-        UI.Text({
-            text: "配置文件：" + (configFile || "~/.config/billion-context/billion-context.json"),
-            style: "bodySmall",
-            color: "onSurfaceVariant",
-            softWrap: true
-        }),
-        UI.Spacer({ height: 8 }),
-
-        // 操作按钮（去掉包裹卡片，按钮布局保持 3+2 两行）
-        UI.Row({ spacing: 8 }, [
-            UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy, weight: 1 }),
-            UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary, weight: 1 }),
-            UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary, weight: 1 })
-        ]),
-        UI.Spacer({ height: 8 }),
-        UI.Row({ spacing: 8 }, [
-            UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError, weight: 1 }),
-            UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded, weight: 1 })
+        // 配置路径 + 操作按钮（恢复 b5c558d 卡片：surfaceVariant 背景，与全屏背景区分）
+        UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, padding: 12 }, [
+            UI.Text({
+                text: "配置文件：" + (configFile || "~/.config/billion-context/billion-context.json"),
+                color: T.onSurfaceVariant,
+                fontSize: 12,
+                maxLines: 2,
+                softWrap: true
+            }),
+            UI.Spacer({ height: 8 }),
+            UI.Row({ spacing: 8 }, [
+                UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy, weight: 1 }),
+                UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary, weight: 1 }),
+                UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary, weight: 1 })
+            ]),
+            UI.Spacer({ height: 8 }),
+            UI.Row({ spacing: 8 }, [
+                UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError, weight: 1 }),
+                UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded, weight: 1 })
+            ])
         ]),
 
         // 字段分组 —— 静态直写（不使用 map 展开）
