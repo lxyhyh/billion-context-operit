@@ -1,5 +1,9 @@
 # billion-context-operit
 
+[![CI](https://github.com/billion-context-operit/billion-context-operit/actions/workflows/ci.yml/badge.svg)](https://github.com/billion-context-operit/billion-context-operit/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
+
 在 Operit 内置 Ubuntu/PRoot 容器中**一键安装与管理官方原版 billion-context Proxy** 的 ToolPkg。
 
 > **本插件只是 Launcher / Manager。** billion-context 是真正的 Context Engine，ACP（压缩/搜索/session）全部由官方 Proxy 自己完成。本插件**不重新实现** billion-context 的任何核心功能，不注册任何 Prompt/Message/ToolCompose Hook，不把 ACP 工具注入 Operit，不保存 API Key。
@@ -68,6 +72,19 @@ Operit 不需要知道 ACP。
 - 不把 compress / decompress / search_context / acp_status 注册为 Operit Tool。
 - 不修改 Operit Kotlin；不使用反射 / Proxy / MITM / 网络 hook。
 - 终端仅用 `Tools.System.terminal`（visible session），服务进程 `nohup setsid` 脱离 terminal 生命周期，健康以 HTTP 为准。
+
+## 开发
+
+```
+src/
+  main.js                  # ToolPkg 入口
+  packages/bili_manager.js # 全部管理工具（METADATA + exports 同步）
+  ui/bili_console/         # 管理页 UI
+  ui/bili_config/          # 配置页 UI
+manifest.json              # 包清单（版本号在此维护）
+scripts/build.sh           # 打包脚本
+.github/workflows/ci.yml   # CI
+```
 
 ## 开发
 

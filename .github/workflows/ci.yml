@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax check
+        run: |
+          node --check src/main.js
+          node --check src/packages/bili_manager.js
+          node --check src/ui/bili_console/index.ui.js
+          node --check src/ui/bili_config/index.ui.js
+
+      - name: Manifest validation
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest OK')"
+
+      - name: Package build
+        run: bash scripts/build.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolpkg
+          path: dist/*.toolpkg
