@@ -15,6 +15,33 @@ jobs:
         with:
           node-version: 20
 
+      - name: Bump patch version
+        # CI 每次运行（push/PR）即代表有代码改动：递增 patch 版本号并同步
+        # manifest.json 与 src/packages/bili_manager.js 的 PACKAGE_VERSION。
+        # 仅用于本次构建产物，不写回仓库。
+        run: |
+          node -e "
+            const fs = require('fs');
+            const manifestPath = 'manifest.json';
+            const managerPath = 'src/packages/bili_manager.js';
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            const parts = String(manifest.version).split('.').map(Number);
+            while (parts.length < 3) parts.push(0);
+            parts[2] = (parts[2] || 0) + 1;
+            const next = parts.join('.');
+            console.log('版本号: ' + manifest.version + ' -> ' + next);
+            manifest.version = next;
+            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+            const src = fs.readFileSync(managerPath, 'utf8');
+            const replaced = src.replace(/(var PACKAGE_VERSION = \")[^\"]*(\";)/, '\$1' + next + '\$2');
+            if (replaced === src) {
+              console.error('PACKAGE_VERSION 同步失败: 未找到 var PACKAGE_VERSION = \"...\";');
+              process.exit(1);
+            }
+            fs.writeFileSync(managerPath, replaced);
+            console.log('已同步 PACKAGE_VERSION = ' + next);
+          "
+
       - name: Syntax check
         run: |
           node --check src/main.js
