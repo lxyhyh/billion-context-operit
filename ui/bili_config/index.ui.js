@@ -360,7 +360,7 @@ function Screen(ctx) {
         const value = Object.prototype.hasOwnProperty.call(form, f.path) ? form[f.path] : (f.def === undefined || f.def === null ? "" : f.def);
         if (f.type === "bool") {
             return UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
-                UI.Column({ weight: 1 }, [
+                UI.Column({ weight: 1, spacing: 2 }, [
                     UI.Text({ text: f.label, color: T.onSurface, fontSize: 14, bold: true, softWrap: true }),
                     UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3, softWrap: true })
                 ]),
@@ -472,38 +472,45 @@ function Screen(ctx) {
         return null;
     }
 
-    return UI.LazyColumn({
-        fillMaxSize: true,
+    return UI.Column({
+        fillMaxWidth: true,
         padding: 16,
-        spacing: 10
+        spacing: 12
     }, [
-        UI.Text({ text: "billion-context 配置", fontSize: 20, bold: true }),
+        // 配置路径（独立小字，无卡片背景，不遮挡）
+        UI.Text({
+            text: "配置文件：" + (configFile || "~/.config/billion-context/billion-context.json"),
+            style: "bodySmall",
+            color: "onSurfaceVariant",
+            softWrap: true
+        }),
+        UI.Spacer({ height: 2 }),
 
-        // 配置路径 + 操作
-        UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, padding: 12 }, [
-            UI.Text({
-                text: "配置文件：" + (configFile || "~/.config/billion-context/billion-context.json"),
-                color: T.onSurfaceVariant,
-                fontSize: 12,
-                maxLines: 2,
-                softWrap: true
-            }),
-            UI.Spacer({ height: 8 }),
-            UI.Row({ spacing: 8 }, [
-                UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy, weight: 1 }),
-                UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary, weight: 1 }),
-                UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary, weight: 1 })
+        // 操作按钮（官方结构：Card + Column padding）
+        UI.Card({
+            fillMaxWidth: true,
+            containerColor: T.surface,
+            shape: { cornerRadius: 8 },
+            elevation: 1
+        }, [
+            UI.Column({ fillMaxWidth: true, padding: 14, spacing: 10 }, [
+            UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
+                UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy, contentPadding: { horizontal: 12, vertical: 8 } }),
+                UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary, contentPadding: { horizontal: 12, vertical: 8 } })
             ]),
-            UI.Spacer({ height: 8 }),
-            UI.Row({ spacing: 8 }, [
-                UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError, weight: 1 }),
-                UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded, weight: 1 })
+            UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
+                UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary, contentPadding: { horizontal: 12, vertical: 8 } }),
+                UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError, contentPadding: { horizontal: 12, vertical: 8 } })
+            ]),
+            UI.Row({ fillMaxWidth: true, horizontalArrangement: "spaceBetween" }, [
+                UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded, contentPadding: { horizontal: 12, vertical: 8 } })
+            ])
             ])
         ]),
 
         // 字段分组 —— 静态直写（不使用 map 展开）
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "基础设置", fontSize: 16, bold: true, color: T.primary, softWrap: true }),
+            UI.Text({ text: "基础设置", style: "titleSmall", color: "primary", fontWeight: "bold", softWrap: true }),
             fieldRow(field("port")),
             fieldRow(field("host")),
             fieldRow(field("upstream")),
@@ -512,7 +519,7 @@ function Screen(ctx) {
             fieldRow(field("passthrough"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "上下文压缩", fontSize: 16, bold: true, color: T.primary, softWrap: true }),
+            UI.Text({ text: "上下文压缩", style: "titleSmall", color: "primary", fontWeight: "bold", softWrap: true }),
             fieldRow(field("compress.minCompressRange")),
             fieldRow(field("compress.modelContextLimit")),
             fieldRow(field("compress.maxContextLimit")),
@@ -525,25 +532,31 @@ function Screen(ctx) {
             fieldRow(field("compress.injectNudge"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "MITM 抓包", fontSize: 16, bold: true, color: T.primary, softWrap: true }),
+            UI.Text({ text: "MITM 抓包", style: "titleSmall", color: "primary", fontWeight: "bold", softWrap: true }),
             fieldRow(field("mitm.enabled")),
             fieldRow(field("mitm.domains"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "提示缓存", fontSize: 16, bold: true, color: T.primary, softWrap: true }),
+            UI.Text({ text: "提示缓存", style: "titleSmall", color: "primary", fontWeight: "bold", softWrap: true }),
             fieldRow(field("promptCache.routing"))
         ]),
 
 
         // 说明
-        UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, padding: 12 }, [
-            UI.Text({
-                text: "说明：修改写入 billion-context.json（持久化）。标「可热更新」的 compress 字段保存后点「热更新」即可生效，无需重启；port/host/upstream 等基础设置改动需重启 bili。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
-                color: T.onSurfaceVariant,
-                fontSize: 11,
-                maxLines: 8,
-                softWrap: true
-            })
+        UI.Card({
+            fillMaxWidth: true,
+            containerColor: T.surface,
+            shape: { cornerRadius: 8 },
+            elevation: 1
+        }, [
+            UI.Column({ fillMaxWidth: true, padding: 14, spacing: 6 }, [
+                UI.Text({
+                    text: "说明：修改写入 billion-context.json（持久化）。标「可热更新」的 compress 字段保存后点「热更新」即可生效，无需重启；port/host/upstream 等基础设置改动需重启 bili。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
+                    style: "bodySmall",
+                    color: "onSurfaceVariant",
+                    softWrap: true
+                })
+            ])
         ]),
 
         // 忙碌 / 消息
