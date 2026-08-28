@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 
 function Screen(ctx) {
     const UI = ctx.UI;
+    const T = ctx.MaterialTheme.colorScheme;
 
     // ---------- 状态 ----------
     const [installed, setInstalled] = ctx.useState("bc_installed", null);        // null=未知 true/false
@@ -405,7 +406,7 @@ function Screen(ctx) {
     const statusText = healthy === true
         ? "运行中（健康）"
         : (running === true ? "启动中/未健康" : (running === false ? "已停止" : "--"));
-    const statusColor = healthy === true ? "#4CAF50" : (running === true ? "#FF9800" : "#9E9E9E");
+    const statusColor = healthy === true ? T.primary : (running === true ? T.tertiary : T.onSurfaceVariant);
     const installedText = installed === null ? "--" : (installed ? "已安装" : "未安装");
 
     // ---------- render（纯函数，无副作用） ----------
@@ -413,29 +414,28 @@ function Screen(ctx) {
     return UI.LazyColumn({
         fillMaxSize: true,
         padding: 16,
-        spacing: 10
+        spacing: 8
     }, [
-        // 标题
-        UI.Text({ text: "billion-context 管理器", fontSize: 20, bold: true }),
+        // （平台顶栏已显示页面名，不再自绘大标题）
 
         // 状态卡片（加大间距，信息分块）
-        UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 20 }, [
+        UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, padding: 20 }, [
             // 核心状态：「状态：已停止」连在一起显示
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", paddingHorizontal: 8 }, [
                 UI.Text({ text: "状态：" + statusText, color: statusColor, bold: true, fontSize: 16 }),
-                UI.Text({ text: healthy === true ? "  ✓ ok=true" : "", color: "#4CAF50", fontSize: 15, bold: true })
+                UI.Text({ text: healthy === true ? "  ✓ ok=true" : "", color: T.primary, fontSize: 15, bold: true })
             ]),
             UI.Spacer({ height: 12 }),
 
             // 安装 / 版本（左右分布）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "安装:", color: "#AAAAAA", fontSize: 14 }),
-                    UI.Text({ text: installedText, color: installed === true ? "#4CAF50" : "#FF9800", fontSize: 14, bold: true })
+                    UI.Text({ text: "安装:", color: T.onSurfaceVariant, fontSize: 14 }),
+                    UI.Text({ text: installedText, color: installed === true ? T.primary : T.tertiary, fontSize: 14, bold: true })
                 ]),
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "版本:", color: "#AAAAAA", fontSize: 14 }),
-                    UI.Text({ text: biliVersion || "--", color: "#FFFFFF", fontSize: 14, bold: true })
+                    UI.Text({ text: "版本:", color: T.onSurfaceVariant, fontSize: 14 }),
+                    UI.Text({ text: biliVersion || "--", color: T.onSurface, fontSize: 14, bold: true })
                 ])
             ]),
             UI.Spacer({ height: 10 }),
@@ -443,12 +443,12 @@ function Screen(ctx) {
             // Node / npm（左右分布）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "Node:", color: "#AAAAAA", fontSize: 13 }),
-                    UI.Text({ text: nodeVersion || "--", color: "#DDDDDD", fontSize: 13 })
+                    UI.Text({ text: "Node:", color: T.onSurfaceVariant, fontSize: 13 }),
+                    UI.Text({ text: nodeVersion || "--", color: T.onSurface, fontSize: 13 })
                 ]),
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "npm:", color: "#AAAAAA", fontSize: 13 }),
-                    UI.Text({ text: npmVersion || "--", color: "#DDDDDD", fontSize: 13 })
+                    UI.Text({ text: "npm:", color: T.onSurfaceVariant, fontSize: 13 }),
+                    UI.Text({ text: npmVersion || "--", color: T.onSurface, fontSize: 13 })
                 ])
             ]),
             UI.Spacer({ height: 10 }),
@@ -456,11 +456,11 @@ function Screen(ctx) {
             // bili 路径（与其他行同缩进）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "bili 路径:", color: "#AAAAAA", fontSize: 13 }),
-                    UI.Text({ text: biliPath || "--", color: "#DDDDDD", fontSize: 13, maxLines: 1, overflow: "ellipsis" })
+                    UI.Text({ text: "bili 路径:", color: T.onSurfaceVariant, fontSize: 13 }),
+                    UI.Text({ text: biliPath || "--", color: T.onSurface, fontSize: 13, maxLines: 1, overflow: "ellipsis" })
                 ]),
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "", color: "#AAAAAA", fontSize: 13 })
+                    UI.Text({ text: "", color: T.onSurfaceVariant, fontSize: 13 })
                 ])
             ]),
             UI.Spacer({ height: 10 }),
@@ -468,12 +468,12 @@ function Screen(ctx) {
             // 端口 / PID（左右分布）
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center", horizontalArrangement: "spaceEvenly", paddingHorizontal: 8 }, [
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "端口:", color: "#AAAAAA", fontSize: 13 }),
-                    UI.Text({ text: port || "8787", color: "#DDDDDD", fontSize: 13, bold: true })
+                    UI.Text({ text: "端口:", color: T.onSurfaceVariant, fontSize: 13 }),
+                    UI.Text({ text: port || "8787", color: T.onSurface, fontSize: 13, bold: true })
                 ]),
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "PID:", color: "#AAAAAA", fontSize: 13 }),
-                    UI.Text({ text: pid === null ? "--" : String(pid), color: "#DDDDDD", fontSize: 13 })
+                    UI.Text({ text: "PID:", color: T.onSurfaceVariant, fontSize: 13 }),
+                    UI.Text({ text: pid === null ? "--" : String(pid), color: T.onSurface, fontSize: 13 })
                 ])
             ]),
             UI.Spacer({ height: 10 }),
@@ -483,103 +483,101 @@ function Screen(ctx) {
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({
                         text: healthBody ? "health: " + healthBody.slice(0, 200) : "health: （未探测）",
-                        color: "#777777",
+                        color: T.onSurfaceVariant,
                         fontSize: 12,
                         maxLines: 2
                     })
                 ]),
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
-                    UI.Text({ text: "", color: "#AAAAAA", fontSize: 13 })
+                    UI.Text({ text: "", color: T.onSurfaceVariant, fontSize: 13 })
                 ])
             ])
         ]),
 
-        // 操作按钮
+        // 操作按钮（weight:1 均分，配置页款式）
         UI.Row({ spacing: 8 }, [
-            UI.Button({ text: "刷新", onClick: refreshAll, enabled: !busy }),
-            UI.Button({ text: "检测", onClick: doDetect, enabled: !busy }),
-            UI.Button({ text: "安装", onClick: doInstall, enabled: !busy && installed !== true }),
-            UI.Button({ text: "更新", onClick: doUpdate, enabled: !busy && installed === true })
+            UI.Button({ text: "刷新", onClick: refreshAll, enabled: !busy, weight: 1 }),
+            UI.Button({ text: "检测", onClick: doDetect, enabled: !busy, weight: 1 }),
+            UI.Button({ text: "安装", onClick: doInstall, enabled: !busy && installed !== true, weight: 1 })
         ]),
         UI.Row({ spacing: 8 }, [
-            UI.Button({ text: "启动", onClick: doStart, enabled: !busy && healthy !== true && installed === true }),
-            UI.Button({ text: "停止", onClick: doStop, enabled: !busy && running === true }),
-            UI.Button({ text: "重启", onClick: doRestart, enabled: !busy && installed === true }),
-            UI.Button({ text: "健康检查", onClick: doHealth, enabled: !busy })
+            UI.Button({ text: "启动", onClick: doStart, enabled: !busy && healthy !== true && installed === true, weight: 1 }),
+            UI.Button({ text: "停止", onClick: doStop, enabled: !busy && running === true, weight: 1 }),
+            UI.Button({ text: "重启", onClick: doRestart, enabled: !busy && installed === true, weight: 1 })
+        ]),
+        UI.Row({ spacing: 8 }, [
+            UI.Button({ text: "更新", onClick: doUpdate, enabled: !busy && installed === true, weight: 1 }),
+            UI.Button({ text: "健康检查", onClick: doHealth, enabled: !busy, weight: 1 })
         ]),
 
-        // 端口/主机
-        UI.Row({ spacing: 8, verticalAlignment: "center" }, [
-            UI.Text({ text: "端口", color: "#AAAAAA", fontSize: 12 }),
-            UI.TextField({
-                value: port,
-                onValueChange: setPort,
-                label: "端口",
-                singleLine: true
-            })
+        // Proxy URL 生成（分组标题 + 输入 + 按钮，配置页款式）
+        UI.Text({ text: "Proxy URL 生成", style: "titleSmall", color: "primary", fontWeight: "bold", softWrap: true }),
+        UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, shape: { cornerRadius: 8 }, elevation: 1 }, [
+            UI.Column({ fillMaxWidth: true, padding: 14, spacing: 8 }, [
+                UI.TextField({
+                    value: upstream,
+                    onValueChange: setUpstream,
+                    label: "Upstream Base URL",
+                    placeholder: "https://api.openai.com/v1",
+                    singleLine: true
+                }),
+                UI.Row({ spacing: 8 }, [
+                    UI.Button({ text: "生成", onClick: doProxyUrl, enabled: !busy, weight: 1 }),
+                    UI.Button({ text: "复制", onClick: doCopyProxyUrl, enabled: !busy && !!proxyUrl, weight: 1 })
+                ]),
+                UI.Text({
+                    text: proxyUrl ? "Proxy URL: " + proxyUrl : "输入 upstream 后点击生成，例如 http://127.0.0.1:8787/bili/https://api.openai.com/v1",
+                    color: proxyUrl ? T.primary : T.onSurfaceVariant,
+                    fontSize: 12,
+                    maxLines: 4,
+                    softWrap: true
+                })
+            ])
         ]),
 
-        // Proxy URL 生成
-        UI.Text({ text: "Proxy URL 生成", fontSize: 16, bold: true }),
-        UI.TextField({
-            value: upstream,
-            onValueChange: setUpstream,
-            label: "Upstream Base URL",
-            placeholder: "https://api.openai.com/v1",
-            singleLine: true
-        }),
-        UI.Spacer({ height: 4 }),
-        UI.Row({ spacing: 8 }, [
-            UI.Button({ text: "生成", onClick: doProxyUrl, enabled: !busy }),
-            UI.Button({ text: "复制", onClick: doCopyProxyUrl, enabled: !busy && !!proxyUrl })
-        ]),
-        UI.Text({
-            text: proxyUrl ? "Proxy URL: " + proxyUrl : "输入 upstream 后点击生成，例如 http://127.0.0.1:8787/bili/https://api.openai.com/v1",
-            color: proxyUrl ? "#4FC3F7" : "#888888",
-            fontSize: 12,
-            maxLines: 4
-        }),
-
-        // 日志
-        UI.Text({ text: "日志（官方 bili.log 尾部）", fontSize: 16, bold: true }),
-        UI.TextField({
-            value: logLines,
-            onValueChange: setLogLines,
-            label: "行数",
-            singleLine: true,
-            fillMaxWidth: true
-        }),
-        UI.Spacer({ height: 4 }),
-        UI.Button({
-            text: "读取日志",
-            onClick: doLogs,
-            enabled: !busy,
-            fillMaxWidth: true
-        }),
-        UI.Card({ fillMaxWidth: true, containerColor: "#141414", padding: 8 }, [
-            UI.Text({
-                text: logText ? logText.slice(-12000) : "点击「读取」查看 ~/.local/state/billion-context/bili.log 尾部",
-                color: "#AAAAAA",
-                fontSize: 11,
-                maxLines: 60
-            })
+        // 日志（分组标题 + 输入 + 按钮 + 卡片，配置页款式）
+        UI.Text({ text: "日志（官方 bili.log 尾部）", style: "titleSmall", color: "primary", fontWeight: "bold", softWrap: true }),
+        UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, shape: { cornerRadius: 8 }, elevation: 1 }, [
+            UI.Column({ fillMaxWidth: true, padding: 14, spacing: 8 }, [
+                UI.TextField({
+                    value: logLines,
+                    onValueChange: setLogLines,
+                    label: "行数",
+                    singleLine: true,
+                    fillMaxWidth: true
+                }),
+                UI.Button({
+                    text: "读取日志",
+                    onClick: doLogs,
+                    enabled: !busy,
+                    fillMaxWidth: true
+                }),
+                UI.Text({
+                    text: logText ? logText.slice(-12000) : "点击「读取」查看 ~/.local/state/billion-context/bili.log 尾部",
+                    color: T.onSurfaceVariant,
+                    fontSize: 11,
+                    maxLines: 60,
+                    softWrap: true
+                })
+            ])
         ]),
 
         // 忙碌指示
         busy ? UI.Row({ spacing: 8, verticalAlignment: "center" }, [
             UI.CircularProgressIndicator({ strokeWidth: 3 }),
-            UI.Text({ text: busyLabel || "处理中…", color: "#FFC107", fontSize: 12 })
+            UI.Text({ text: busyLabel || "处理中…", color: T.tertiary, fontSize: 12 })
         ]) : UI.Spacer({ height: 0 }),
 
         // 消息区
-        lastMsg ? UI.Text({ text: "✓ " + lastMsg, color: "#4CAF50", fontSize: 12 }) : UI.Spacer({ height: 0 }),
-        lastError ? UI.Text({ text: "✗ " + lastError, color: "#EF5350", fontSize: 12 }) : UI.Spacer({ height: 0 }),
+        lastMsg ? UI.Text({ text: "✓ " + lastMsg, color: T.primary, fontSize: 12 }) : UI.Spacer({ height: 0 }),
+        lastError ? UI.Text({ text: "✗ " + lastError, color: T.error, fontSize: 12 }) : UI.Spacer({ height: 0 }),
 
         UI.Spacer({ height: 8 }),
         UI.Text({
             text: "本插件只是 Launcher/Manager。billion-context 是真正的 Context Engine，ACP 由官方 Proxy 自己完成；API Key 仍由 Operit Provider 持有并透传。",
-            color: "#666666",
-            fontSize: 11
+            style: "bodySmall",
+            color: "onSurfaceVariant",
+            softWrap: true
         })
     ]);
 }
