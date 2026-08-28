@@ -6,6 +6,8 @@
  * 2. 所有 ctx.callTool 进入全局串行队列（bridge 并发响应错配免疫）。
  * 3. 失败不覆盖旧数据；未就绪显示 "--" 加载态。
  * 4. 保存 = 逐字段 diff 后 bili_config_set / bili_config_clear，全部串行。
+ * 5. compress 类字段（path 以 "compress." 开头）可经官方 PUT /__bili/config 热更新，无需重启；
+ *    providers 写入后需调用官方 POST /__bili/config/reload 强制重载。
  */
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -22,12 +24,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const FIELDS = [
     { path: "port", label: "端口", type: "number", def: "8787", desc: "bili 监听端口。CLI 参数 --port 可临时覆盖。" },
     { path: "host", label: "监听地址", type: "text", def: "127.0.0.1", desc: "bili 监听地址。默认仅本机，改为 0.0.0.0 可对外服务。" },
+    { path: "upstream", label: "上游地址", type: "text", def: "", desc: "默认上游 API Base URL（如 https://api.anthropic.com）。留空 = 官方默认。" },
     { path: "debug", label: "调试模式", type: "bool", def: false, desc: "输出更详细的调试日志。" },
     { path: "autoUpdate", label: "自动更新", type: "bool", def: true, desc: "启动时自动检查并更新 billion-context。" },
     { path: "passthrough", label: "透传模式", type: "bool", def: false, desc: "关闭压缩/上下文管理，请求原样透传（相当于禁用 ACP）。" },
-    { path: "compress.minCompressRange", label: "最小压缩范围", type: "number", def: "1000", desc: "上下文低于该 token 数时不触发压缩。调小可更积极压缩。" },
-    { path: "compress.injectTool", label: "注入压缩工具", type: "bool", def: true, desc: "向模型注入压缩工具声明（模型可主动触发压缩）。" },
-    { path: "compress.injectNudge", label: "注入压缩提示", type: "bool", def: true, desc: "向模型注入压缩引导语（模型被提醒可压缩时）。" },
+    { path: "compress.minCompressRange", label: "最小压缩范围", type: "number", def: "1000", desc: "上下文低于该 token 数时不触发压缩。调小可更积极压缩。（可热更新）" },
+    { path: "compress.modelContextLimit", label: "模型上下文上限", type: "number", def: "200000", desc: "模型 context 上限（token）。留空 = 官方默认 200000。（可热更新）" },
+    { path: "compress.maxContextLimit", label: "最大上下文上限", type: "number", def: "", desc: "压缩器允许的最大上下文。留空 = 官方默认。（可热更新）" },
+    { path: "compress.emergencyThresholdPercent", label: "紧急压缩阈值", type: "number", def: "0.95", desc: "上下文占用达到该比例时触发紧急压缩（0~1）。留空 = 官方默认。（可热更新）" },
+    { path: "compress.nudgeGrowthTokens", label: "提示增长阈值", type: "number", def: "50000", desc: "上下文增量超过该 token 数时给出压缩提示。留空 = 官方默认。（可热更新）" },
+    { path: "compress.preserveRecentMessages", label: "保留最近消息数", type: "number", def: "5", desc: "压缩时保留最近 N 条消息原文。留空 = 官方默认。（可热更新）" },
+    { path: "compress.preserveRecentTokens", label: "保留最近 token 数", type: "number", def: "5000", desc: "压缩时保留最近 N 个 token 原文。留空 = 官方默认。（可热更新）" },
+    { path: "compress.tiers", label: "分层压缩", type: "bool", def: true, desc: "启用分层压缩（tier2/tier3 逐级压缩）。（可热更新）" },
+    { path: "compress.injectTool", label: "注入压缩工具", type: "bool", def: true, desc: "向模型注入压缩工具声明（模型可主动触发压缩）。（可热更新）" },
+    { path: "compress.injectNudge", label: "注入压缩提示", type: "bool", def: true, desc: "向模型注入压缩引导语（模型被提醒可压缩时）。（可热更新）" },
     { path: "mitm.enabled", label: "MITM 抓包", type: "bool", def: false, desc: "启用 HTTPS 中间人代理（用于调试外部流量）。" },
     { path: "mitm.domains", label: "MITM 域名", type: "csv", def: "", desc: "需要 MITM 的域名，逗号分隔（如 api.example.com,cdn.example.com）。" },
     { path: "promptCache.routing", label: "提示缓存路由", type: "select", def: "auto", options: ["enabled", "disabled", "auto"], desc: "prompt cache 路由策略：enabled 强制开启 / disabled 关闭 / auto 自动。" }
@@ -40,6 +50,7 @@ function Screen(ctx) {
     const [config, setConfig] = ctx.useState("bc_cfg_config", null);        // null=未加载，{} = 已加载
     const [configFile, setConfigFile] = ctx.useState("bc_cfg_file", "");
     const [form, setForm] = ctx.useState("bc_cfg_form", {});                // path -> 表单值
+    const [providers, setProviders] = ctx.useState("bc_cfg_providers", []); // [{url, proxy, context}] 编辑态
     const [busy, setBusy] = ctx.useState("bc_cfg_busy", false);
     const [busyLabel, setBusyLabel] = ctx.useState("bc_cfg_busy_label", "");
     const [lastMsg, setLastMsg] = ctx.useState("bc_cfg_last_msg", "");
@@ -148,6 +159,42 @@ function Screen(ctx) {
         setForm(next);
     }
 
+    // ---------- providers 编辑态 <-> 配置值 ----------
+    function configToProviders(cfg) {
+        const raw = cfg && cfg.providers && typeof cfg.providers === "object" ? cfg.providers : {};
+        const list = [];
+        Object.keys(raw).forEach(function (url) {
+            const entry = raw[url] && typeof raw[url] === "object" ? raw[url] : {};
+            list.push({
+                url: url,
+                proxy: entry.proxy === undefined || entry.proxy === null ? "" : asText(entry.proxy),
+                context: entry.models && entry.models["*"] && entry.models["*"].context !== undefined ? asText(entry.models["*"].context) : ""
+            });
+        });
+        return list;
+    }
+
+    function providersToConfig(list) {
+        const out = {};
+        list.forEach(function (row) {
+            const url = asText(row.url).trim().replace(/\/+$/, "");
+            if (!url) {
+                return;
+            }
+            const entry = {};
+            const proxy = asText(row.proxy).trim();
+            if (proxy) {
+                entry.proxy = proxy;
+            }
+            const ctx = asText(row.context).trim();
+            if (ctx !== "" && Number.isFinite(Number(ctx))) {
+                entry.models = { "*": { context: Number(ctx) } };
+            }
+            out[url] = entry;
+        });
+        return out;
+    }
+
     // ---------- 动作 ----------
     async function doLoad() {
         setBusy(true);
@@ -165,6 +212,7 @@ function Screen(ctx) {
             setConfig(cfg);
             setConfigFile(asText(record.configFile));
             loadFormFromConfig(cfg);
+            setProviders(configToProviders(cfg));
             setLastMsg("配置已加载（" + asText(record.configFile) + "）");
         } catch (error) {
             setLastError(toErrorText(error));
@@ -217,6 +265,21 @@ function Screen(ctx) {
                 }
                 changed++;
             }
+            // 保存 providers（整体写回）
+            const newProviders = providersToConfig(providers);
+            const oldProviders = config.providers && typeof config.providers === "object" ? config.providers : {};
+            if (JSON.stringify(newProviders) !== JSON.stringify(oldProviders)) {
+                const setResult = await serialCall("bili_config_set", {
+                    path: "providers",
+                    value: JSON.stringify(newProviders)
+                });
+                const setRecord = parseRecord(setResult);
+                if (setRecord.success === false) {
+                    setLastError("保存 providers 失败：" + asText(setRecord.error));
+                    return;
+                }
+                changed++;
+            }
             // 重新加载以同步显示
             const result = await serialCall("bili_config_get", {});
             const record = parseRecord(result);
@@ -228,7 +291,97 @@ function Screen(ctx) {
             setConfig(cfg);
             setConfigFile(asText(record.configFile));
             loadFormFromConfig(cfg);
-            setLastMsg(changed === 0 ? "配置无变化，未写入" : "已保存 " + changed + " 项配置（重启 bili 后生效）");
+            setProviders(configToProviders(cfg));
+            setLastMsg(changed === 0 ? "配置无变化，未写入" : "已保存 " + changed + " 项配置（compress 可点「热更新」立即生效；providers 需点「重载配置」）");
+        } catch (error) {
+            setLastError(toErrorText(error));
+        } finally {
+            setBusy(false);
+            setBusyLabel("");
+        }
+    }
+
+    async function doHotApply() {
+        // 把表单中 compress.* 的改动经官方 PUT /__bili/config 热应用到运行中的 bili（无需重启）
+        setBusy(true);
+        setBusyLabel("正在热更新 compress…");
+        setLastError("");
+        setLastMsg("");
+        try {
+            if (!config || typeof config !== "object") {
+                setLastError("请先点击「加载配置」再热更新");
+                return;
+            }
+            const hot = {};
+            let changed = 0;
+            FIELDS.forEach(function (f) {
+                if (f.path.indexOf("compress.") !== 0) {
+                    return;
+                }
+                const got = getByPath(config, f.path);
+                const orig = got.ok ? configToFormValue(f, got.value) : (f.def === undefined || f.def === null ? "" : f.def);
+                const current = Object.prototype.hasOwnProperty.call(form, f.path) ? form[f.path] : orig;
+                const same = f.type === "bool" ? !!current === !!orig : asText(current) === asText(orig);
+                if (same) {
+                    return;
+                }
+                hot[f.path.slice("compress.".length)] = formToConfigValue(f, current);
+                changed++;
+            });
+            if (changed === 0) {
+                setLastMsg("compress 无改动，无需热更新");
+                return;
+            }
+            const result = await serialCall("bili_config_hot_apply", { config: JSON.stringify({ compress: hot }) });
+            const record = parseRecord(result);
+            if (record.success === false) {
+                setLastError("热更新失败：" + (asText(record.error) || "bili_config_hot_apply 失败"));
+                return;
+            }
+            // 热更新成功后再同步一次（把表单刷新为服务器确认的配置）
+            const reloadResult = await serialCall("bili_config_get", {});
+            const reloadRecord = parseRecord(reloadResult);
+            if (reloadRecord.success === false) {
+                setLastMsg("热更新成功，但刷新配置失败：" + asText(reloadRecord.error));
+                return;
+            }
+            const cfg = reloadRecord.config && typeof reloadRecord.config === "object" ? reloadRecord.config : {};
+            setConfig(cfg);
+            loadFormFromConfig(cfg);
+            setProviders(configToProviders(cfg));
+            setLastMsg("热更新成功（" + changed + " 项 compress 已生效，无需重启）");
+        } catch (error) {
+            setLastError(toErrorText(error));
+        } finally {
+            setBusy(false);
+            setBusyLabel("");
+        }
+    }
+
+    async function doReload() {
+        // 调用官方 POST /__bili/config/reload 强制重载配置文件（providers 改动后使用）
+        setBusy(true);
+        setBusyLabel("正在强制重载配置…");
+        setLastError("");
+        setLastMsg("");
+        try {
+            const result = await serialCall("bili_config_reload", {});
+            const record = parseRecord(result);
+            if (record.success === false || record.ok === false) {
+                setLastError("重载失败：" + (asText(record.error) || "bili_config_reload 失败"));
+                return;
+            }
+            const reloadResult = await serialCall("bili_config_get", {});
+            const reloadRecord = parseRecord(reloadResult);
+            if (reloadRecord.success === false) {
+                setLastMsg("重载成功，但刷新配置失败：" + asText(reloadRecord.error));
+                return;
+            }
+            const cfg = reloadRecord.config && typeof reloadRecord.config === "object" ? reloadRecord.config : {};
+            setConfig(cfg);
+            loadFormFromConfig(cfg);
+            setProviders(configToProviders(cfg));
+            setLastMsg("配置已重载（providers 等改动已生效）");
         } catch (error) {
             setLastError(toErrorText(error));
         } finally {
@@ -244,6 +397,7 @@ function Screen(ctx) {
         try {
             if (config && typeof config === "object") {
                 loadFormFromConfig(config);
+                setProviders(configToProviders(config));
                 setLastMsg("表单已重置为当前配置文件内容");
             } else {
                 setLastError("尚未加载配置");
@@ -324,8 +478,8 @@ function Screen(ctx) {
     // ---------- render（纯函数） ----------
     const loaded = config !== null && typeof config === "object";
     const groups = [
-        { title: "基础设置", fields: ["port", "host", "debug", "autoUpdate", "passthrough"] },
-        { title: "上下文压缩", fields: ["compress.minCompressRange", "compress.injectTool", "compress.injectNudge"] },
+        { title: "基础设置", fields: ["port", "host", "upstream", "debug", "autoUpdate", "passthrough"] },
+        { title: "上下文压缩", fields: ["compress.minCompressRange", "compress.modelContextLimit", "compress.maxContextLimit", "compress.emergencyThresholdPercent", "compress.nudgeGrowthTokens", "compress.preserveRecentMessages", "compress.preserveRecentTokens", "compress.tiers", "compress.injectTool", "compress.injectNudge"] },
         { title: "MITM 抓包", fields: ["mitm.enabled", "mitm.domains"] },
         { title: "提示缓存", fields: ["promptCache.routing"] }
     ];
@@ -349,6 +503,8 @@ function Screen(ctx) {
             UI.Row({ spacing: 8 }, [
                 UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy }),
                 UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: "#2E7D32" }),
+                UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: "#1565C0" }),
+                UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: "#E65100" }),
                 UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded })
             ])
         ]),
@@ -365,13 +521,90 @@ function Screen(ctx) {
             ]);
         }),
 
+        // Providers 管理
+        UI.Column({ fillMaxWidth: true, spacing: 8 }, [
+            UI.Text({ text: "Providers（按上游 URL 路由）", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            UI.Text({ text: "每条 = 一个上游 URL 及其专属代理 / 全局模型 context。留空 proxy/context 表示继承全局。保存后需点「重载配置」生效。", color: "#888888", fontSize: 11, maxLines: 3 }),
+            UI.Spacer({ height: 4 }),
+            providers.map(function (row, idx) {
+                return UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 10 }, [
+                    UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
+                        UI.Text({ text: "#" + (idx + 1), color: "#4FC3F7", fontSize: 12, bold: true }),
+                        UI.Spacer({ width: 8 }),
+                        UI.Button({
+                            text: "删除",
+                            onClick: function () {
+                                const next = providers.slice();
+                                next.splice(idx, 1);
+                                setProviders(next);
+                            },
+                            containerColor: "#B71C1C",
+                            contentColor: "#FFFFFF"
+                        })
+                    ]),
+                    UI.Spacer({ height: 6 }),
+                    UI.TextField({
+                        value: row.url,
+                        onValueChange: function (v) {
+                            const next = providers.slice();
+                            next[idx] = Object.assign({}, row, { url: v });
+                            setProviders(next);
+                        },
+                        label: "上游 URL",
+                        placeholder: "https://api.example.com/v1",
+                        singleLine: true,
+                        fillMaxWidth: true
+                    }),
+                    UI.Spacer({ height: 6 }),
+                    UI.TextField({
+                        value: row.proxy,
+                        onValueChange: function (v) {
+                            const next = providers.slice();
+                            next[idx] = Object.assign({}, row, { proxy: v });
+                            setProviders(next);
+                        },
+                        label: "代理（可空）",
+                        placeholder: "http://127.0.0.1:7890",
+                        singleLine: true,
+                        fillMaxWidth: true
+                    }),
+                    UI.Spacer({ height: 6 }),
+                    UI.TextField({
+                        value: row.context,
+                        onValueChange: function (v) {
+                            const next = providers.slice();
+                            next[idx] = Object.assign({}, row, { context: v });
+                            setProviders(next);
+                        },
+                        label: "模型 context（可空）",
+                        placeholder: "200000",
+                        singleLine: true,
+                        fillMaxWidth: true,
+                        keyboardType: "number"
+                    })
+                ]);
+            }),
+            UI.Spacer({ height: 4 }),
+            UI.Button({
+                text: "+ 添加 Provider",
+                onClick: function () {
+                    const next = providers.slice();
+                    next.push({ url: "", proxy: "", context: "" });
+                    setProviders(next);
+                },
+                containerColor: "#333333",
+                contentColor: "#4FC3F7",
+                fillMaxWidth: true
+            })
+        ]),
+
         // 说明
         UI.Card({ fillMaxWidth: true, containerColor: "#141414", padding: 12 }, [
             UI.Text({
-                text: "说明：修改写入 billion-context.json（持久化），重启 bili 后生效。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
+                text: "说明：修改写入 billion-context.json（持久化）。标「可热更新」的 compress 字段保存后点「热更新」即可生效，无需重启；port/host/upstream 等基础设置与 providers 改动需重启 bili（providers 也可在保存后点「重载配置」强制生效）。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
                 color: "#666666",
                 fontSize: 11,
-                maxLines: 6
+                maxLines: 8
             })
         ]),
 

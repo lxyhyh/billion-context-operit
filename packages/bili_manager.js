@@ -148,6 +148,29 @@
                 { "name": "path", "description": { "zh": "点路径，如 compress.minCompressRange", "en": "Dot path, e.g. compress.minCompressRange" }, "type": "string", "required": true },
                 { "name": "config_file", "description": { "zh": "自定义配置文件路径（可选）", "en": "Custom config file path (optional)" }, "type": "string", "required": false }
             ]
+        },
+        {
+            "name": "bili_config_reload",
+            "description": {
+                "zh": "调用官方 POST /__bili/config/reload 强制重载配置文件（保存 providers 等改动后需调用以生效）。",
+                "en": "Call the official POST /__bili/config/reload to force-reload the config file (needed after saving providers etc.)."
+            },
+            "parameters": [
+                { "name": "host", "description": { "zh": "bili 主机，默认 127.0.0.1", "en": "bili host, default 127.0.0.1" }, "type": "string", "required": false },
+                { "name": "port", "description": { "zh": "bili 端口，默认 8787", "en": "bili port, default 8787" }, "type": "number", "required": false }
+            ]
+        },
+        {
+            "name": "bili_config_hot_apply",
+            "description": {
+                "zh": "调用官方 PUT /__bili/config 热更新运行中的 bili 配置（compress 等无需重启）。返回官方响应；HTTP 409 时附带官方 parseError 供修正。",
+                "en": "Call the official PUT /__bili/config to hot-apply config to a running bili (e.g. compress, no restart needed). Returns the official response; HTTP 409 includes the official parseError for correction."
+            },
+            "parameters": [
+                { "name": "config", "description": { "zh": "要热更新的配置片段（JSON 对象，如 {\"compress\": {...}} 或 {\"providers\": {...}}）", "en": "Config fragment to apply (JSON object, e.g. {\"compress\":{...}} or {\"providers\":{...}})" }, "type": "string", "required": true },
+                { "name": "host", "description": { "zh": "bili 主机，默认 127.0.0.1", "en": "bili host, default 127.0.0.1" }, "type": "string", "required": false },
+                { "name": "port", "description": { "zh": "bili 端口，默认 8787", "en": "bili port, default 8787" }, "type": "number", "required": false }
+            ]
         }
     ]
 }
@@ -1418,6 +1441,85 @@ const BiliManager = (function () {
         });
     }
 
+    /**
+     * 通过官方 /__bili 管理 API 对运行中的 bili 发 JSON 请求。
+     * 仅支持 GET/POST/PUT/DELETE。成功返回 {statusCode, body, json}；
+     * HTTP 4xx/5xx 不抛异常，统一放在 ok=false 的结果里（官方 parseError 可能就在 body 中）。
+     */
+    async function biliJsonRequest(method, path, body, params) {
+        var config = await loadConfig();
+        var host = firstNonBlank(params && params.host, config.host, DEFAULT_HOST);
+        var port = parsePositiveInt(params && params.port, config.port, DEFAULT_PORT);
+        var url = "http://" + host + ":" + String(port) + path;
+        var response = await Tools.Net.http({
+            url: url,
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            body: body,
+            read_timeout: 15000,
+            ignore_ssl: true
+        });
+        var statusCode = Number(response && response.statusCode !== undefined ? response.statusCode : -1);
+        var content = asText(response && response.content);
+        var json = null;
+        var parseError = null;
+        try {
+            json = JSON.parse(content);
+        } catch (_error) {
+            parseError = _error && _error.message ? _error.message : String(_error);
+        }
+        return {
+            ok: statusCode >= 200 && statusCode < 300,
+            statusCode: statusCode,
+            body: content,
+            json: json,
+            parseError: parseError,
+            url: url
+        };
+    }
+
+    async function bili_config_reload(params) {
+        return await runTool(async function () {
+            var result = await biliJsonRequest("POST", "/__bili/config/reload", {}, params);
+            return createSuccessResult({
+                ok: result.ok,
+                statusCode: result.statusCode,
+                response: result.body.slice(0, 2000),
+                note: result.ok
+                    ? "已强制重载配置文件（providers 等改动已生效）。"
+                    : "重载失败（HTTP " + String(result.statusCode) + "）。请检查 bili 是否在运行。"
+            });
+        });
+    }
+
+    async function bili_config_hot_apply(params) {
+        return await runTool(async function () {
+            var raw = firstNonBlank(params && params.config, "");
+            var parsed = parseJsonValue(raw);
+            if (!parsed.ok) {
+                return createErrorResult(new Error(parsed.error));
+            }
+            if (!parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
+                return createErrorResult(new Error("config 必须是 JSON 对象，如 {\"compress\": {...}}"));
+            }
+            var result = await biliJsonRequest("PUT", "/__bili/config", parsed.value, params);
+            if (!result.ok) {
+                // 官方 409 会带 parseError；原样透出，供 UI 修正后重试
+                var officialError = result.json && (result.json.parseError || result.json.error) || (result.parseError ? "响应非 JSON：" + result.parseError : "");
+                return createErrorResult(new Error("热更新失败（HTTP " + String(result.statusCode) + "）" + (officialError ? "：" + String(officialError) : "")), {
+                    statusCode: result.statusCode,
+                    response: result.body.slice(0, 2000)
+                });
+            }
+            return createSuccessResult({
+                ok: result.ok,
+                statusCode: result.statusCode,
+                response: result.body.slice(0, 2000),
+                note: "已热更新（无需重启）。providers 改动请再调用 bili_config_reload 强制重载。"
+            });
+        });
+    }
+
     /* ------------------------------------------------------------------ */
     /* 导出                                                               */
     /* ------------------------------------------------------------------ */
@@ -1436,6 +1538,8 @@ const BiliManager = (function () {
     tools.bili_config_get = bili_config_get;
     tools.bili_config_set = bili_config_set;
     tools.bili_config_clear = bili_config_clear;
+    tools.bili_config_reload = bili_config_reload;
+    tools.bili_config_hot_apply = bili_config_hot_apply;
 
     return {
         detect: function (params) { return tools.detect(params); },
@@ -1451,7 +1555,9 @@ const BiliManager = (function () {
         proxy_url: function (params) { return tools.proxy_url(params); },
         bili_config_get: function (params) { return tools.bili_config_get(params); },
         bili_config_set: function (params) { return tools.bili_config_set(params); },
-        bili_config_clear: function (params) { return tools.bili_config_clear(params); }
+        bili_config_clear: function (params) { return tools.bili_config_clear(params); },
+        bili_config_reload: function (params) { return tools.bili_config_reload(params); },
+        bili_config_hot_apply: function (params) { return tools.bili_config_hot_apply(params); }
     };
 })();
 
@@ -1469,3 +1575,5 @@ exports.proxy_url = BiliManager.proxy_url;
 exports.bili_config_get = BiliManager.bili_config_get;
 exports.bili_config_set = BiliManager.bili_config_set;
 exports.bili_config_clear = BiliManager.bili_config_clear;
+exports.bili_config_reload = BiliManager.bili_config_reload;
+exports.bili_config_hot_apply = BiliManager.bili_config_hot_apply;
