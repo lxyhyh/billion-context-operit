@@ -410,14 +410,17 @@ function Screen(ctx) {
         }
     }
 
+    // ---------- 主题色（遵循 MaterialTheme，不硬编码） ----------
+    const T = ctx.MaterialTheme.colorScheme;
+
     // ---------- 字段控件渲染 ----------
     function fieldControl(f) {
         const value = Object.prototype.hasOwnProperty.call(form, f.path) ? form[f.path] : (f.def === undefined || f.def === null ? "" : f.def);
         if (f.type === "bool") {
             return UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
                 UI.Column({ weight: 1 }, [
-                    UI.Text({ text: f.label, color: "#FFFFFF", fontSize: 14, bold: true }),
-                    UI.Text({ text: f.desc, color: "#888888", fontSize: 11, maxLines: 3 })
+                    UI.Text({ text: f.label, color: T.onSurface, fontSize: 14, bold: true }),
+                    UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3 })
                 ]),
                 UI.Spacer({ width: 12 }),
                 UI.Switch({
@@ -432,9 +435,13 @@ function Screen(ctx) {
         }
         if (f.type === "select") {
             const options = f.options || [];
+            const selectedColor = T.primary;
+            const unselectedColor = T.surfaceVariant;
+            const selectedContent = T.onPrimary;
+            const unselectedContent = T.onSurfaceVariant;
             return UI.Column({ fillMaxWidth: true }, [
-                UI.Text({ text: f.label, color: "#FFFFFF", fontSize: 14, bold: true }),
-                UI.Text({ text: f.desc, color: "#888888", fontSize: 11, maxLines: 3 }),
+                UI.Text({ text: f.label, color: T.onSurface, fontSize: 14, bold: true }),
+                UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3 }),
                 UI.Spacer({ height: 6 }),
                 UI.Row({ spacing: 8 }, [
                     options.indexOf("enabled") >= 0
@@ -445,8 +452,8 @@ function Screen(ctx) {
                                 next[f.path] = "enabled";
                                 setForm(next);
                             },
-                            containerColor: asText(value) === "enabled" ? "#2E7D32" : "#333333",
-                            contentColor: asText(value) === "enabled" ? "#FFFFFF" : "#CCCCCC"
+                            containerColor: asText(value) === "enabled" ? selectedColor : unselectedColor,
+                            contentColor: asText(value) === "enabled" ? selectedContent : unselectedContent
                         })
                         : UI.Spacer({ height: 0 }),
                     options.indexOf("disabled") >= 0
@@ -457,8 +464,8 @@ function Screen(ctx) {
                                 next[f.path] = "disabled";
                                 setForm(next);
                             },
-                            containerColor: asText(value) === "disabled" ? "#2E7D32" : "#333333",
-                            contentColor: asText(value) === "disabled" ? "#FFFFFF" : "#CCCCCC"
+                            containerColor: asText(value) === "disabled" ? selectedColor : unselectedColor,
+                            contentColor: asText(value) === "disabled" ? selectedContent : unselectedContent
                         })
                         : UI.Spacer({ height: 0 }),
                     options.indexOf("auto") >= 0
@@ -469,8 +476,8 @@ function Screen(ctx) {
                                 next[f.path] = "auto";
                                 setForm(next);
                             },
-                            containerColor: asText(value) === "auto" ? "#2E7D32" : "#333333",
-                            contentColor: asText(value) === "auto" ? "#FFFFFF" : "#CCCCCC"
+                            containerColor: asText(value) === "auto" ? selectedColor : unselectedColor,
+                            contentColor: asText(value) === "auto" ? selectedContent : unselectedContent
                         })
                         : UI.Spacer({ height: 0 })
                 ])
@@ -478,8 +485,8 @@ function Screen(ctx) {
         }
         // number / text / csv
         return UI.Column({ fillMaxWidth: true }, [
-            UI.Text({ text: f.label + (f.type === "csv" ? "（逗号分隔）" : ""), color: "#FFFFFF", fontSize: 14, bold: true }),
-            UI.Text({ text: f.desc, color: "#888888", fontSize: 11, maxLines: 3 }),
+            UI.Text({ text: f.label + (f.type === "csv" ? "（逗号分隔）" : ""), color: T.onSurface, fontSize: 14, bold: true }),
+            UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3 }),
             UI.Spacer({ height: 4 }),
             UI.TextField({
                 value: asText(value),
@@ -496,7 +503,7 @@ function Screen(ctx) {
     }
 
     function fieldRow(f) {
-        return UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 12 }, [
+        return UI.Card({ fillMaxWidth: true, containerColor: T.surface, padding: 12 }, [
             fieldControl(f)
         ]);
     }
@@ -506,9 +513,9 @@ function Screen(ctx) {
         const row = providers[idx];
         if (!row) {
             // 空行也渲染占位卡片，保证布局稳定
-            return UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 10 }, [
+            return UI.Card({ fillMaxWidth: true, containerColor: T.surface, padding: 10 }, [
                 UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
-                    UI.Text({ text: "#" + (idx + 1), color: "#4FC3F7", fontSize: 12, bold: true }),
+                    UI.Text({ text: "#" + (idx + 1), color: T.primary, fontSize: 12, bold: true }),
                     UI.Spacer({ width: 8 }),
                     UI.Button({
                         text: "删除",
@@ -517,8 +524,8 @@ function Screen(ctx) {
                             next.splice(idx, 1);
                             setProviders(next);
                         },
-                        containerColor: "#B71C1C",
-                        contentColor: "#FFFFFF"
+                        containerColor: T.error,
+                        contentColor: T.onError
                     })
                 ]),
                 UI.Spacer({ height: 6 }),
@@ -572,9 +579,9 @@ function Screen(ctx) {
                 })
             ]);
         }
-        return UI.Card({ fillMaxWidth: true, containerColor: "#1E1E1E", padding: 10 }, [
+        return UI.Card({ fillMaxWidth: true, containerColor: T.surface, padding: 10 }, [
             UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
-                UI.Text({ text: "#" + (idx + 1), color: "#4FC3F7", fontSize: 12, bold: true }),
+                UI.Text({ text: "#" + (idx + 1), color: T.primary, fontSize: 12, bold: true }),
                 UI.Spacer({ width: 8 }),
                 UI.Button({
                     text: "删除",
@@ -583,8 +590,8 @@ function Screen(ctx) {
                         next.splice(idx, 1);
                         setProviders(next);
                     },
-                    containerColor: "#B71C1C",
-                    contentColor: "#FFFFFF"
+                    containerColor: T.error,
+                    contentColor: T.onError
                 })
             ]),
             UI.Spacer({ height: 6 }),
@@ -651,26 +658,26 @@ function Screen(ctx) {
         UI.Text({ text: "billion-context 配置", fontSize: 20, bold: true }),
 
         // 配置路径 + 操作
-        UI.Card({ fillMaxWidth: true, containerColor: "#141414", padding: 12 }, [
+        UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, padding: 12 }, [
             UI.Text({
                 text: "配置文件：" + (configFile || "~/.config/billion-context/billion-context.json"),
-                color: "#AAAAAA",
+                color: T.onSurfaceVariant,
                 fontSize: 12,
                 maxLines: 2
             }),
             UI.Spacer({ height: 8 }),
             UI.Row({ spacing: 8 }, [
                 UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy }),
-                UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: "#2E7D32" }),
-                UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: "#1565C0" }),
-                UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: "#E65100" }),
+                UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary }),
+                UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary }),
+                UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError }),
                 UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded })
             ])
         ]),
 
         // 字段分组 —— 静态直写（不使用 map 展开）
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "基础设置", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            UI.Text({ text: "基础设置", fontSize: 16, bold: true, color: T.primary }),
             fieldRow(field("port")),
             fieldRow(field("host")),
             fieldRow(field("upstream")),
@@ -679,7 +686,7 @@ function Screen(ctx) {
             fieldRow(field("passthrough"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "上下文压缩", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            UI.Text({ text: "上下文压缩", fontSize: 16, bold: true, color: T.primary }),
             fieldRow(field("compress.minCompressRange")),
             fieldRow(field("compress.modelContextLimit")),
             fieldRow(field("compress.maxContextLimit")),
@@ -692,19 +699,19 @@ function Screen(ctx) {
             fieldRow(field("compress.injectNudge"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "MITM 抓包", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            UI.Text({ text: "MITM 抓包", fontSize: 16, bold: true, color: T.primary }),
             fieldRow(field("mitm.enabled")),
             fieldRow(field("mitm.domains"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "提示缓存", fontSize: 16, bold: true, color: "#4FC3F7" }),
+            UI.Text({ text: "提示缓存", fontSize: 16, bold: true, color: T.primary }),
             fieldRow(field("promptCache.routing"))
         ]),
 
         // Providers 管理 —— 静态渲染固定行（不使用 map 展开）
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "Providers（按上游 URL 路由）", fontSize: 16, bold: true, color: "#4FC3F7" }),
-            UI.Text({ text: "每条 = 一个上游 URL 及其专属代理 / 全局模型 context。留空 proxy/context 表示继承全局。保存后需点「重载配置」生效。", color: "#888888", fontSize: 11, maxLines: 3 }),
+            UI.Text({ text: "Providers（按上游 URL 路由）", fontSize: 16, bold: true, color: T.primary }),
+            UI.Text({ text: "每条 = 一个上游 URL 及其专属代理 / 全局模型 context。留空 proxy/context 表示继承全局。保存后需点「重载配置」生效。", color: T.onSurfaceVariant, fontSize: 11, maxLines: 3 }),
             UI.Spacer({ height: 4 }),
             providerRow(0),
             providerRow(1),
@@ -717,17 +724,17 @@ function Screen(ctx) {
                     next.push({ url: "", proxy: "", context: "" });
                     setProviders(next);
                 },
-                containerColor: "#333333",
-                contentColor: "#4FC3F7",
+                containerColor: T.surfaceVariant,
+                contentColor: T.primary,
                 fillMaxWidth: true
             })
         ]),
 
         // 说明
-        UI.Card({ fillMaxWidth: true, containerColor: "#141414", padding: 12 }, [
+        UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, padding: 12 }, [
             UI.Text({
                 text: "说明：修改写入 billion-context.json（持久化）。标「可热更新」的 compress 字段保存后点「热更新」即可生效，无需重启；port/host/upstream 等基础设置与 providers 改动需重启 bili（providers 也可在保存后点「重载配置」强制生效）。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
-                color: "#666666",
+                color: T.onSurfaceVariant,
                 fontSize: 11,
                 maxLines: 8
             })
@@ -736,10 +743,10 @@ function Screen(ctx) {
         // 忙碌 / 消息
         busy ? UI.Row({ spacing: 8, verticalAlignment: "center" }, [
             UI.CircularProgressIndicator({ strokeWidth: 3 }),
-            UI.Text({ text: busyLabel || "处理中…", color: "#FFC107", fontSize: 12 })
+            UI.Text({ text: busyLabel || "处理中…", color: T.primary, fontSize: 12 })
         ]) : UI.Spacer({ height: 0 }),
-        lastMsg ? UI.Text({ text: "✓ " + lastMsg, color: "#4CAF50", fontSize: 12 }) : UI.Spacer({ height: 0 }),
-        lastError ? UI.Text({ text: "✗ " + lastError, color: "#EF5350", fontSize: 12 }) : UI.Spacer({ height: 0 }),
+        lastMsg ? UI.Text({ text: "✓ " + lastMsg, color: T.primary, fontSize: 12 }) : UI.Spacer({ height: 0 }),
+        lastError ? UI.Text({ text: "✗ " + lastError, color: T.error, fontSize: 12 }) : UI.Spacer({ height: 0 }),
 
         UI.Spacer({ height: 8 })
     ]);
