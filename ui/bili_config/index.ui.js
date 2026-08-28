@@ -472,10 +472,10 @@ function Screen(ctx) {
         return null;
     }
 
-    return UI.Column({
-        fillMaxWidth: true,
+    return UI.LazyColumn({
+        fillMaxSize: true,
         padding: 16,
-        spacing: 12
+        spacing: 10
     }, [
         // 配置路径（独立小字，无卡片背景，不被遮挡）
         UI.Text({
