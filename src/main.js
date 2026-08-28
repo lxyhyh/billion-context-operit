@@ -15,11 +15,33 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerToolPkg = registerToolPkg;
+exports.onApplicationCreate = onApplicationCreate;
 
 const biliConsoleUI = __importDefault(require("./ui/bili_console/index.ui.js"));
 const biliConfigUI = __importDefault(require("./ui/bili_config/index.ui.js"));
+const biliManager = require("./packages/bili_manager.js");
+
+// 容器/应用启动时自动拉起 bili（自愈）：Operit 活着 → bili 就活着。
+// 只在 autoStartEnabled 开启且 bili 未运行时拉起；失败不阻塞宿主启动。
+async function onApplicationCreate() {
+    try {
+        const result = await biliManager.auto_start({});
+        console.log("[billion-context] application_on_create auto_start: " +
+            JSON.stringify(result));
+    } catch (error) {
+        console.log("[billion-context] application_on_create auto_start failed: " +
+            (error && error.message ? error.message : String(error)));
+    }
+    return { ok: true };
+}
 
 function registerToolPkg() {
+    // 容器/应用启动时自愈：自动拉起 bili（Operit 活着 → bili 就活着）
+    ToolPkg.registerAppLifecycleHook({
+        id: "bili_auto_start_on_create",
+        event: "application_on_create",
+        function: onApplicationCreate
+    });
     // 只用 registerToolboxUiModule（官方 linux_ssh 范本）：
     // 它会自动映射为一个 UI route 并自动挂载 toolbox 入口。
     // 不要再额外 registerUiRoute / registerNavigationEntry 指向同一 UI，

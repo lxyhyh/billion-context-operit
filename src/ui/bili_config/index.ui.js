@@ -24,6 +24,7 @@ const FIELDS = [
     { path: "port", label: "端口", type: "number", def: "8787", desc: "bili 监听端口。CLI 参数 --port 可临时覆盖。" },
     { path: "host", label: "监听地址", type: "text", def: "127.0.0.1", desc: "bili 监听地址。默认仅本机，改为 0.0.0.0 可对外服务。" },
     { path: "upstream", label: "上游地址", type: "text", def: "", desc: "默认上游 API Base URL（如 https://api.anthropic.com）。留空 = 官方默认。" },
+    { path: "autoStart", label: "自动启动", type: "bool", def: true, plugin: true, pluginKey: "autoStartEnabled", desc: "Operit/容器启动时自动拉起 bili（自愈，无需手动启动）。关闭后需手动启动。" },
     { path: "debug", label: "调试模式", type: "bool", def: false, desc: "输出更详细的调试日志。" },
     { path: "autoUpdate", label: "自动更新", type: "bool", def: true, desc: "启动时自动检查并更新 billion-context。" },
     { path: "passthrough", label: "透传模式", type: "bool", def: false, desc: "关闭压缩/上下文管理，请求原样透传（相当于禁用 ACP）。" },
@@ -47,6 +48,7 @@ function Screen(ctx) {
 
     // ---------- 状态 ----------
     const [config, setConfig] = ctx.useState("bc_cfg_config", null);        // null=未加载，{} = 已加载
+    const [pluginCfg, setPluginCfg] = ctx.useState("bc_cfg_plugin_cfg", null); // 插件自身配置（autoStart 等）
     const [configFile, setConfigFile] = ctx.useState("bc_cfg_file", "");
     const [form, setForm] = ctx.useState("bc_cfg_form", {});                // path -> 表单值
     const [busy, setBusy] = ctx.useState("bc_cfg_busy", false);
@@ -148,10 +150,24 @@ function Screen(ctx) {
         return str;
     }
 
-    function loadFormFromConfig(cfg) {
+    function loadFormFromConfig(cfg, pluginCfg) {
         const next = {};
         FIELDS.forEach(function (f) {
-            const got = getByPath(cfg, f.path);
+            let source = cfg;
+            let lookupPath = f.path;
+            if (f.plugin) {
+                if (!pluginCfg) {
+                    // 未提供插件配置时保留当前表单值（不重置为默认）
+                    if (Object.prototype.hasOwnProperty.call(form, f.path)) {
+                        next[f.path] = form[f.path];
+                        return;
+                    }
+                    pluginCfg = {};
+                }
+                source = pluginCfg;
+                lookupPath = f.pluginKey || f.path;
+            }
+            const got = getByPath(source, lookupPath);
             next[f.path] = configToFormValue(f, got.ok ? got.value : undefined);
         });
         setForm(next);
@@ -173,7 +189,19 @@ function Screen(ctx) {
             const cfg = record.config && typeof record.config === "object" ? record.config : {};
             setConfig(cfg);
             setConfigFile(asText(record.configFile));
-            loadFormFromConfig(cfg);
+            // 插件自身配置（autoStart 开关等）单独读取
+            let pluginConfig = {};
+            try {
+                const pluginResult = await serialCall("plugin_config_get", {});
+                const pluginRecord = parseRecord(pluginResult);
+                if (pluginRecord.success !== false && pluginRecord.config && typeof pluginRecord.config === "object") {
+                    pluginConfig = pluginRecord.config;
+                }
+            } catch (_e) {
+                // 插件配置读取失败不影响主配置加载
+            }
+            setPluginCfg(pluginConfig);
+            loadFormFromConfig(cfg, pluginConfig);
             setLastMsg("配置已加载（" + asText(record.configFile) + "）");
         } catch (error) {
             setLastError(toErrorText(error));
@@ -206,7 +234,17 @@ function Screen(ctx) {
                 }
                 const newValue = formToConfigValue(f, current);
                 const isEmpty = f.type === "csv" ? (Array.isArray(newValue) && newValue.length === 0) : asText(current).trim() === "";
-                if (isEmpty) {
+                if (f.plugin) {
+                    // 插件自身配置（autoStart 等）：走 plugin_config_set，不写入官方 bili 配置
+                    const pluginSetResult = await serialCall("plugin_config_set", {
+                        autoStartEnabled: !!newValue
+                    });
+                    const pluginSetRecord = parseRecord(pluginSetResult);
+                    if (pluginSetRecord.success === false) {
+                        setLastError("保存 " + f.path + " 失败：" + asText(pluginSetRecord.error));
+                        return;
+                    }
+                } else if (isEmpty) {
                     const clearResult = await serialCall("bili_config_clear", { path: f.path });
                     const clearRecord = parseRecord(clearResult);
                     if (clearRecord.success === false) {
@@ -236,7 +274,19 @@ function Screen(ctx) {
             const cfg = record.config && typeof record.config === "object" ? record.config : {};
             setConfig(cfg);
             setConfigFile(asText(record.configFile));
-            loadFormFromConfig(cfg);
+            // 同步刷新插件配置（autoStart 等），避免被默认值覆盖
+            let pluginConfig = {};
+            try {
+                const pluginResult = await serialCall("plugin_config_get", {});
+                const pluginRecord = parseRecord(pluginResult);
+                if (pluginRecord.success !== false && pluginRecord.config && typeof pluginRecord.config === "object") {
+                    pluginConfig = pluginRecord.config;
+                }
+            } catch (_e) {
+                // 忽略：保持已保存的表单值
+            }
+            setPluginCfg(pluginConfig);
+            loadFormFromConfig(cfg, pluginConfig);
             setLastMsg(changed === 0 ? "配置无变化，未写入" : "已保存 " + changed + " 项配置（compress 可点「热更新」立即生效）");
         } catch (error) {
             setLastError(toErrorText(error));
@@ -339,7 +389,7 @@ function Screen(ctx) {
         setLastError("");
         try {
             if (config && typeof config === "object") {
-                loadFormFromConfig(config);
+                loadFormFromConfig(config, pluginCfg || undefined);
                 setLastMsg("表单已重置为当前配置文件内容");
             } else {
                 setLastError("尚未加载配置");

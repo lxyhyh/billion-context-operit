@@ -63,6 +63,18 @@
             ]
         },
         {
+            "name": "auto_start",
+            "description": {
+                "zh": "容器/应用启动时的自愈入口：若 autoStartEnabled 开启且 bili 未运行，则自动拉起 bili；已运行则保持。供生命周期钩子调用，也可手动触发。",
+                "en": "Self-healing entry on container/app startup: if autoStartEnabled is on and bili is not running, start it automatically; keep it if already running. For lifecycle hooks, also callable manually."
+            },
+            "parameters": [
+                { "name": "host", "description": { "zh": "监听地址，默认 127.0.0.1", "en": "Listen host, default 127.0.0.1" }, "type": "string", "required": false },
+                { "name": "port", "description": { "zh": "监听端口，默认 8787", "en": "Listen port, default 8787" }, "type": "number", "required": false },
+                { "name": "wait_seconds", "description": { "zh": "健康轮询最长等待秒数，默认 45", "en": "Max health poll seconds, default 45" }, "type": "number", "required": false }
+            ]
+        },
+        {
             "name": "status",
             "description": {
                 "zh": "查询 bili 当前状态：进程、PID 文件、/__bili/health 探测结果、版本、端口。",
@@ -170,6 +182,24 @@
                 { "name": "config", "description": { "zh": "要热更新的配置片段（JSON 对象，如 {\"compress\": {...}} 或 {\"providers\": {...}}）", "en": "Config fragment to apply (JSON object, e.g. {\"compress\":{...}} or {\"providers\":{...}})" }, "type": "string", "required": true },
                 { "name": "host", "description": { "zh": "bili 主机，默认 127.0.0.1", "en": "bili host, default 127.0.0.1" }, "type": "string", "required": false },
                 { "name": "port", "description": { "zh": "bili 端口，默认 8787", "en": "bili port, default 8787" }, "type": "number", "required": false }
+            ]
+        },
+        {
+            "name": "plugin_config_get",
+            "description": {
+                "zh": "读取本插件自身的配置文件（config.json，含 autoStartEnabled 等插件级开关）。",
+                "en": "Read this plugin's own config file (config.json, incl. plugin-level switches like autoStartEnabled)."
+            },
+            "parameters": []
+        },
+        {
+            "name": "plugin_config_set",
+            "description": {
+                "zh": "写入本插件自身的配置（config.json）。目前支持 autoStartEnabled（boolean）：Operit/容器启动时是否自动拉起 bili。",
+                "en": "Write this plugin's own config (config.json). Currently supports autoStartEnabled (boolean): whether to auto-start bili on Operit/container startup."
+            },
+            "parameters": [
+                { "name": "autoStartEnabled", "description": { "zh": "自动启动开关（boolean）", "en": "Auto-start switch (boolean)" }, "type": "boolean", "required": false }
             ]
         }
     ]
@@ -404,14 +434,18 @@ const BiliManager = (function () {
         var config = await readConfigFile();
         return {
             host: firstNonBlank(config.host, DEFAULT_HOST),
-            port: parsePositiveInt(config.port, DEFAULT_PORT)
+            port: parsePositiveInt(config.port, DEFAULT_PORT),
+            autoStartEnabled: config.autoStartEnabled !== false
         };
     }
 
-    async function saveConfig(host, port) {
+    async function saveConfig(host, port, autoStartEnabled) {
         var config = await readConfigFile();
         config.host = firstNonBlank(host, config.host, DEFAULT_HOST);
         config.port = parsePositiveInt(port, config.port, DEFAULT_PORT);
+        if (typeof autoStartEnabled === "boolean") {
+            config.autoStartEnabled = autoStartEnabled;
+        }
         await writeConfigFile(config);
         return config;
     }
@@ -888,6 +922,56 @@ const BiliManager = (function () {
                 health: waitResult.probe,
                 proxyBaseUrl: "http://127.0.0.1:" + port + "/bili/",
                 message: "bili 启动成功"
+            });
+        });
+    }
+
+    async function auto_start(params) {
+        return await runTool(async function () {
+            var config = await loadConfig();
+            var host = firstNonBlank(params && params.host, config.host, DEFAULT_HOST);
+            var port = parsePositiveInt(params && params.port, config.port, DEFAULT_PORT);
+
+            if (!config.autoStartEnabled) {
+                return createSuccessResult({
+                    started: false,
+                    skipped: true,
+                    reason: "auto_start_disabled",
+                    message: "自动启动已关闭（config.autoStartEnabled=false），不拉起 bili。"
+                });
+            }
+
+            // 已健康运行则保持，不做任何事
+            var currentHealth = await probeHealth(port, 5000);
+            if (currentHealth.healthy) {
+                return createSuccessResult({
+                    started: false,
+                    alreadyRunning: true,
+                    running: true,
+                    healthy: true,
+                    host: host,
+                    port: port,
+                    health: currentHealth.probe,
+                    proxyBaseUrl: "http://127.0.0.1:" + port + "/bili/",
+                    message: "bili 已在运行且健康，无需自动启动。"
+                });
+            }
+
+            // 未运行则拉起（start 内部幂等：已运行则保持）
+            var startResult = await start({
+                host: host,
+                port: port,
+                wait_seconds: parsePositiveInt(params && params.wait_seconds, 45)
+            });
+            return createSuccessResult({
+                started: startResult.success === true,
+                skipped: false,
+                host: host,
+                port: port,
+                detail: startResult,
+                message: startResult.success
+                    ? "bili 自动启动成功。"
+                    : "bili 自动启动未完成：" + asText(startResult.error)
             });
         });
     }
@@ -1520,6 +1604,34 @@ const BiliManager = (function () {
         });
     }
 
+    async function plugin_config_get() {
+        return await runTool(async function () {
+            var config = await readConfigFile();
+            return createSuccessResult({
+                configFile: (await resolveConfigDir()) + "/" + CONFIG_FILE_NAME,
+                config: config,
+                autoStartEnabled: config.autoStartEnabled !== false
+            });
+        });
+    }
+
+    async function plugin_config_set(params) {
+        return await runTool(async function () {
+            var config = await readConfigFile();
+            if (typeof params === "object" && params !== null &&
+                typeof params.autoStartEnabled === "boolean") {
+                config.autoStartEnabled = params.autoStartEnabled;
+            }
+            var filePath = await writeConfigFile(config);
+            return createSuccessResult({
+                configFile: filePath,
+                config: config,
+                autoStartEnabled: config.autoStartEnabled !== false,
+                note: "已写入插件配置（config.json）。autoStartEnabled 在下次 Operit/容器启动时生效。"
+            });
+        });
+    }
+
     /* ------------------------------------------------------------------ */
     /* 导出                                                               */
     /* ------------------------------------------------------------------ */
@@ -1529,6 +1641,7 @@ const BiliManager = (function () {
     tools.start = start;
     tools.stop = stop;
     tools.restart = restart;
+    tools.auto_start = auto_start;
     tools.status = status;
     tools.health = health;
     tools.version = version;
@@ -1540,6 +1653,8 @@ const BiliManager = (function () {
     tools.bili_config_clear = bili_config_clear;
     tools.bili_config_reload = bili_config_reload;
     tools.bili_config_hot_apply = bili_config_hot_apply;
+    tools.plugin_config_get = plugin_config_get;
+    tools.plugin_config_set = plugin_config_set;
 
     return {
         detect: function (params) { return tools.detect(params); },
@@ -1547,6 +1662,7 @@ const BiliManager = (function () {
         start: function (params) { return tools.start(params); },
         stop: function (params) { return tools.stop(params); },
         restart: function (params) { return tools.restart(params); },
+        auto_start: function (params) { return tools.auto_start(params); },
         status: function (params) { return tools.status(params); },
         health: function (params) { return tools.health(params); },
         version: function (params) { return tools.version(params); },
@@ -1557,7 +1673,9 @@ const BiliManager = (function () {
         bili_config_set: function (params) { return tools.bili_config_set(params); },
         bili_config_clear: function (params) { return tools.bili_config_clear(params); },
         bili_config_reload: function (params) { return tools.bili_config_reload(params); },
-        bili_config_hot_apply: function (params) { return tools.bili_config_hot_apply(params); }
+        bili_config_hot_apply: function (params) { return tools.bili_config_hot_apply(params); },
+        plugin_config_get: function (params) { return tools.plugin_config_get(params); },
+        plugin_config_set: function (params) { return tools.plugin_config_set(params); }
     };
 })();
 
@@ -1566,6 +1684,7 @@ exports.install = BiliManager.install;
 exports.start = BiliManager.start;
 exports.stop = BiliManager.stop;
 exports.restart = BiliManager.restart;
+exports.auto_start = BiliManager.auto_start;
 exports.status = BiliManager.status;
 exports.health = BiliManager.health;
 exports.version = BiliManager.version;
@@ -1577,3 +1696,5 @@ exports.bili_config_set = BiliManager.bili_config_set;
 exports.bili_config_clear = BiliManager.bili_config_clear;
 exports.bili_config_reload = BiliManager.bili_config_reload;
 exports.bili_config_hot_apply = BiliManager.bili_config_hot_apply;
+exports.plugin_config_get = BiliManager.plugin_config_get;
+exports.plugin_config_set = BiliManager.plugin_config_set;
