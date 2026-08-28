@@ -1,6 +1,6 @@
 # billion-context-operit
 
-[![CI](https://github.com/billion-context-operit/billion-context-operit/actions/workflows/ci.yml/badge.svg)](https://github.com/billion-context-operit/billion-context-operit/actions/workflows/ci.yml)
+[![CI](https://github.com/lxyhyh/billion-context-operit/actions/workflows/ci.yml/badge.svg)](https://github.com/lxyhyh/billion-context-operit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
 
@@ -73,7 +73,7 @@ Operit 不需要知道 ACP。
 - 不修改 Operit Kotlin；不使用反射 / Proxy / MITM / 网络 hook。
 - 终端仅用 `Tools.System.terminal`（visible session），服务进程 `nohup setsid` 脱离 terminal 生命周期，健康以 HTTP 为准。
 
-## 开发
+## 目录结构
 
 ```
 src/
@@ -84,20 +84,21 @@ src/
 manifest.json              # 包清单（版本号在此维护）
 scripts/build.sh           # 打包脚本
 .github/workflows/ci.yml   # CI
+LICENSE / CHANGELOG.md / CONTRIBUTING.md / SECURITY.md
 ```
 
-## 开发
+## 构建与产物
 
 ```bash
 # 校验
-node --check packages/bili_manager.js
-node --check ui/bili_console/index.ui.js
-node --check ui/bili_config/index.ui.js
-node --check main.js
+node --check src/main.js
+node --check src/packages/bili_manager.js
+node --check src/ui/bili_console/index.ui.js
+node --check src/ui/bili_config/index.ui.js
 node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
 
 # 打包
 bash scripts/build.sh
 ```
 
-产物：`dist/com.operit.billion_context-v0.3.0.toolpkg`（版本号来自 `manifest.json`）
+产物：`dist/com.operit.billion_context-v0.3.0.toolpkg`（版本号来自 `manifest.json`；`dist/` 与 `*.toolpkg` 已在 `.gitignore` 中，不提交 GitHub）
