@@ -185,7 +185,7 @@
  * - 状态持久化走文件通道（工具脚本环境无 setEnv），UI 通过工具获取真实状态。
  */
 const BiliManager = (function () {
-    var PACKAGE_VERSION = "0.1.0";
+    var PACKAGE_VERSION = "0.3.0";
 
     var DEFAULT_HOST = "127.0.0.1";
     var DEFAULT_PORT = 8787;

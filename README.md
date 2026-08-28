@@ -17,7 +17,9 @@ Operit
 
 Operit 不需要知道 ACP。
 
-## 功能（第一阶段）
+## 功能
+
+### 管理工具（`bili_manager` 子包）
 
 | 工具 | 说明 |
 |---|---|
@@ -32,14 +34,17 @@ Operit 不需要知道 ACP。
 | `update` | 官方 `bili update` |
 | `logs` | 官方 `~/.local/state/billion-context/bili.log` 尾部（默认 200 行，最多 800） |
 | `proxy_url` | 输入 upstream_base_url → `http://127.0.0.1:<port>/bili/<原 URL>`（不 encode 整个 URL，不追加任何 endpoint） |
+| `bili_config_get` | 读取官方 `GET /__bili/config`，返回 path/providers/upstreamProxy/upstreamProxyMode/compress/parseError |
+| `bili_config_set` | 写入官方配置（providers/upstreamProxy/upstreamProxyMode/compress），HTTP 409 透出官方 parseError；providers 变更后需重载 |
+| `bili_config_clear` | 清空已保存的官方配置覆盖 |
+| `bili_config_reload` | `POST /__bili/config/reload` 强制重载配置文件 |
+| `bili_config_hot_apply` | `PUT /__bili/config` 热更新 compress 配置，无需重启即生效 |
 
-## UI（Compose DSL 管理面板）
+### UI（Compose DSL）
 
-- 安装状态 / 运行状态 / 版本 / 端口 / PID / health 响应
-- 启动 / 停止 / 重启 / 安装 / 更新 / 健康检查 / 刷新 / 检测
-- 日志读取入口（行数可调）
-- upstream URL 输入 → Proxy URL 生成 / 复制
-- UI 不自行维护服务状态，全部通过工具读取真实状态
+- **管理页**（`bili_console`）：安装/运行状态、版本、PID、health 响应；启动/停止/重启/安装/更新/健康检查/刷新/检测；日志读取；upstream → Proxy URL 生成/复制
+- **配置页**（`bili_config`）：可视化编辑官方配置文件（路径、providers、upstream、compress 阈值/上下文限制/tiers 等），支持加载/保存/热更新/重载/重置；标「可热更新」的 compress 字段保存后点「热更新」即生效，基础设置改动需重启
+- UI 不自行维护服务状态，全部通过工具读取真实状态；配色跟随系统深浅色模式（MaterialTheme token）
 
 ## 使用
 
@@ -50,6 +55,7 @@ Operit 不需要知道 ACP。
 5. 在输入框填入 upstream Base URL（如 `https://api.openai.com/v1`），点击「生成」得到 Proxy URL。
 6. 在 Operit Provider 设置中，把 Base URL 改为生成的 Proxy URL，API Key 保持原样。
 7. 正常对话即可；长上下文时 billion-context 自行注入 ACP 并让模型主动 compress。
+8. 需要调优时打开「配置」页编辑保存；compress 相关字段可「热更新」即时生效。
 
 ## 验收闭环
 
@@ -69,6 +75,7 @@ Operit 不需要知道 ACP。
 # 校验
 node --check packages/bili_manager.js
 node --check ui/bili_console/index.ui.js
+node --check ui/bili_config/index.ui.js
 node --check main.js
 node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
 
@@ -76,4 +83,4 @@ node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
 bash scripts/build.sh
 ```
 
-产物：`dist/com.operit.billion_context-v0.1.0.toolpkg`
+产物：`dist/com.operit.billion_context-v0.3.0.toolpkg`（版本号来自 `manifest.json`）
