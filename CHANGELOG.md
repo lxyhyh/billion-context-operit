@@ -26,5 +26,5 @@
 - 管理页 UI：安装/运行状态、启动/停止/重启、日志读取、Proxy URL 生成。
 - 一键安装官方 billion-context Proxy 到 Operit Ubuntu/PRoot 容器。
 
-[0.3.0]: https://github.com/billion-context-operit/billion-context-operit/releases/tag/v0.3.0
-[0.2.1]: https://github.com/billion-context-operit/billion-context-operit/releases/tag/v0.2.1
+[0.3.0]: https://github.com/lxyhyh/billion-context-operit/releases/tag/v0.3.0
+[0.2.1]: https://github.com/lxyhyh/billion-context-operit/releases/tag/v0.2.1
