@@ -7,7 +7,6 @@
  * 3. 失败不覆盖旧数据；未就绪显示 "--" 加载态。
  * 4. 保存 = 逐字段 diff 后 bili_config_set / bili_config_clear，全部串行。
  * 5. compress 类字段（path 以 "compress." 开头）可经官方 PUT /__bili/config 热更新，无需重启；
- *    providers 写入后需调用官方 POST /__bili/config/reload 强制重载。
  */
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -50,7 +49,6 @@ function Screen(ctx) {
     const [config, setConfig] = ctx.useState("bc_cfg_config", null);        // null=未加载，{} = 已加载
     const [configFile, setConfigFile] = ctx.useState("bc_cfg_file", "");
     const [form, setForm] = ctx.useState("bc_cfg_form", {});                // path -> 表单值
-    const [providers, setProviders] = ctx.useState("bc_cfg_providers", []); // [{url, proxy, context}] 编辑态
     const [busy, setBusy] = ctx.useState("bc_cfg_busy", false);
     const [busyLabel, setBusyLabel] = ctx.useState("bc_cfg_busy_label", "");
     const [lastMsg, setLastMsg] = ctx.useState("bc_cfg_last_msg", "");
@@ -159,42 +157,6 @@ function Screen(ctx) {
         setForm(next);
     }
 
-    // ---------- providers 编辑态 <-> 配置值 ----------
-    function configToProviders(cfg) {
-        const raw = cfg && cfg.providers && typeof cfg.providers === "object" ? cfg.providers : {};
-        const list = [];
-        Object.keys(raw).forEach(function (url) {
-            const entry = raw[url] && typeof raw[url] === "object" ? raw[url] : {};
-            list.push({
-                url: url,
-                proxy: entry.proxy === undefined || entry.proxy === null ? "" : asText(entry.proxy),
-                context: entry.models && entry.models["*"] && entry.models["*"].context !== undefined ? asText(entry.models["*"].context) : ""
-            });
-        });
-        return list;
-    }
-
-    function providersToConfig(list) {
-        const out = {};
-        list.forEach(function (row) {
-            const url = asText(row.url).trim().replace(/\/+$/, "");
-            if (!url) {
-                return;
-            }
-            const entry = {};
-            const proxy = asText(row.proxy).trim();
-            if (proxy) {
-                entry.proxy = proxy;
-            }
-            const ctx = asText(row.context).trim();
-            if (ctx !== "" && Number.isFinite(Number(ctx))) {
-                entry.models = { "*": { context: Number(ctx) } };
-            }
-            out[url] = entry;
-        });
-        return out;
-    }
-
     // ---------- 动作 ----------
     async function doLoad() {
         setBusy(true);
@@ -212,7 +174,6 @@ function Screen(ctx) {
             setConfig(cfg);
             setConfigFile(asText(record.configFile));
             loadFormFromConfig(cfg);
-            setProviders(configToProviders(cfg));
             setLastMsg("配置已加载（" + asText(record.configFile) + "）");
         } catch (error) {
             setLastError(toErrorText(error));
@@ -265,21 +226,6 @@ function Screen(ctx) {
                 }
                 changed++;
             }
-            // 保存 providers（整体写回）
-            const newProviders = providersToConfig(providers);
-            const oldProviders = config.providers && typeof config.providers === "object" ? config.providers : {};
-            if (JSON.stringify(newProviders) !== JSON.stringify(oldProviders)) {
-                const setResult = await serialCall("bili_config_set", {
-                    path: "providers",
-                    value: JSON.stringify(newProviders)
-                });
-                const setRecord = parseRecord(setResult);
-                if (setRecord.success === false) {
-                    setLastError("保存 providers 失败：" + asText(setRecord.error));
-                    return;
-                }
-                changed++;
-            }
             // 重新加载以同步显示
             const result = await serialCall("bili_config_get", {});
             const record = parseRecord(result);
@@ -291,8 +237,7 @@ function Screen(ctx) {
             setConfig(cfg);
             setConfigFile(asText(record.configFile));
             loadFormFromConfig(cfg);
-            setProviders(configToProviders(cfg));
-            setLastMsg(changed === 0 ? "配置无变化，未写入" : "已保存 " + changed + " 项配置（compress 可点「热更新」立即生效；providers 需点「重载配置」）");
+            setLastMsg(changed === 0 ? "配置无变化，未写入" : "已保存 " + changed + " 项配置（compress 可点「热更新」立即生效）");
         } catch (error) {
             setLastError(toErrorText(error));
         } finally {
@@ -348,7 +293,6 @@ function Screen(ctx) {
             const cfg = reloadRecord.config && typeof reloadRecord.config === "object" ? reloadRecord.config : {};
             setConfig(cfg);
             loadFormFromConfig(cfg);
-            setProviders(configToProviders(cfg));
             setLastMsg("热更新成功（" + changed + " 项 compress 已生效，无需重启）");
         } catch (error) {
             setLastError(toErrorText(error));
@@ -359,7 +303,7 @@ function Screen(ctx) {
     }
 
     async function doReload() {
-        // 调用官方 POST /__bili/config/reload 强制重载配置文件（providers 改动后使用）
+        // 调用官方 POST /__bili/config/reload 强制重载配置文件
         setBusy(true);
         setBusyLabel("正在强制重载配置…");
         setLastError("");
@@ -380,8 +324,7 @@ function Screen(ctx) {
             const cfg = reloadRecord.config && typeof reloadRecord.config === "object" ? reloadRecord.config : {};
             setConfig(cfg);
             loadFormFromConfig(cfg);
-            setProviders(configToProviders(cfg));
-            setLastMsg("配置已重载（providers 等改动已生效）");
+            setLastMsg("配置已重载");
         } catch (error) {
             setLastError(toErrorText(error));
         } finally {
@@ -397,7 +340,6 @@ function Screen(ctx) {
         try {
             if (config && typeof config === "object") {
                 loadFormFromConfig(config);
-                setProviders(configToProviders(config));
                 setLastMsg("表单已重置为当前配置文件内容");
             } else {
                 setLastError("尚未加载配置");
@@ -419,8 +361,8 @@ function Screen(ctx) {
         if (f.type === "bool") {
             return UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
                 UI.Column({ weight: 1 }, [
-                    UI.Text({ text: f.label, color: T.onSurface, fontSize: 14, bold: true }),
-                    UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3 })
+                    UI.Text({ text: f.label, color: T.onSurface, fontSize: 14, bold: true, softWrap: true }),
+                    UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3, softWrap: true })
                 ]),
                 UI.Spacer({ width: 12 }),
                 UI.Switch({
@@ -440,8 +382,8 @@ function Screen(ctx) {
             const selectedContent = T.onPrimary;
             const unselectedContent = T.onSurfaceVariant;
             return UI.Column({ fillMaxWidth: true }, [
-                UI.Text({ text: f.label, color: T.onSurface, fontSize: 14, bold: true }),
-                UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3 }),
+                UI.Text({ text: f.label, color: T.onSurface, fontSize: 14, bold: true, softWrap: true }),
+                UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3, softWrap: true }),
                 UI.Spacer({ height: 6 }),
                 UI.Row({ spacing: 8 }, [
                     options.indexOf("enabled") >= 0
@@ -483,11 +425,11 @@ function Screen(ctx) {
                 ])
             ]);
         }
-        // number / text / csv
-        return UI.Column({ fillMaxWidth: true }, [
-            UI.Text({ text: f.label + (f.type === "csv" ? "（逗号分隔）" : ""), color: T.onSurface, fontSize: 14, bold: true }),
-            UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3 }),
-            UI.Spacer({ height: 4 }),
+        // number / text / csv —— 使用官方 TextField 结构（label 悬浮、softWrap 换行）
+        return UI.Column({ fillMaxWidth: true, spacing: 6 }, [
+            UI.Text({ text: f.label + (f.type === "csv" ? "（逗号分隔）" : ""), color: T.onSurface, fontSize: 14, bold: true, softWrap: true }),
+            UI.Text({ text: f.desc, color: T.onSurfaceVariant, fontSize: 11, maxLines: 3, softWrap: true }),
+            UI.Spacer({ height: 2 }),
             UI.TextField({
                 value: asText(value),
                 onValueChange: function (newValue) {
@@ -495,7 +437,9 @@ function Screen(ctx) {
                     next[f.path] = newValue;
                     setForm(next);
                 },
-                singleLine: true,
+                singleLine: false,
+                minLines: 1,
+                maxLines: 3,
                 fillMaxWidth: true,
                 keyboardType: f.type === "number" ? "number" : undefined
             })
@@ -503,137 +447,15 @@ function Screen(ctx) {
     }
 
     function fieldRow(f) {
-        return UI.Card({ fillMaxWidth: true, containerColor: T.surface, padding: 12 }, [
-            fieldControl(f)
-        ]);
-    }
-
-    // ---------- provider 行渲染（静态，固定下标） ----------
-    function providerRow(idx) {
-        const row = providers[idx];
-        if (!row) {
-            // 空行也渲染占位卡片，保证布局稳定
-            return UI.Card({ fillMaxWidth: true, containerColor: T.surface, padding: 10 }, [
-                UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
-                    UI.Text({ text: "#" + (idx + 1), color: T.primary, fontSize: 12, bold: true }),
-                    UI.Spacer({ width: 8 }),
-                    UI.Button({
-                        text: "删除",
-                        onClick: function () {
-                            const next = providers.slice();
-                            next.splice(idx, 1);
-                            setProviders(next);
-                        },
-                        containerColor: T.error,
-                        contentColor: T.onError
-                    })
-                ]),
-                UI.Spacer({ height: 6 }),
-                UI.TextField({
-                    value: "",
-                    onValueChange: function (v) {
-                        const next = providers.slice();
-                        while (next.length <= idx) {
-                            next.push({ url: "", proxy: "", context: "" });
-                        }
-                        next[idx] = Object.assign({}, next[idx], { url: v });
-                        setProviders(next);
-                    },
-                    label: "上游 URL",
-                    placeholder: "https://api.example.com/v1",
-                    singleLine: true,
-                    fillMaxWidth: true
-                }),
-                UI.Spacer({ height: 6 }),
-                UI.TextField({
-                    value: "",
-                    onValueChange: function (v) {
-                        const next = providers.slice();
-                        while (next.length <= idx) {
-                            next.push({ url: "", proxy: "", context: "" });
-                        }
-                        next[idx] = Object.assign({}, next[idx], { proxy: v });
-                        setProviders(next);
-                    },
-                    label: "代理（可空）",
-                    placeholder: "http://127.0.0.1:7890",
-                    singleLine: true,
-                    fillMaxWidth: true
-                }),
-                UI.Spacer({ height: 6 }),
-                UI.TextField({
-                    value: "",
-                    onValueChange: function (v) {
-                        const next = providers.slice();
-                        while (next.length <= idx) {
-                            next.push({ url: "", proxy: "", context: "" });
-                        }
-                        next[idx] = Object.assign({}, next[idx], { context: v });
-                        setProviders(next);
-                    },
-                    label: "模型 context（可空）",
-                    placeholder: "200000",
-                    singleLine: true,
-                    fillMaxWidth: true,
-                    keyboardType: "number"
-                })
-            ]);
-        }
-        return UI.Card({ fillMaxWidth: true, containerColor: T.surface, padding: 10 }, [
-            UI.Row({ fillMaxWidth: true, verticalAlignment: "center" }, [
-                UI.Text({ text: "#" + (idx + 1), color: T.primary, fontSize: 12, bold: true }),
-                UI.Spacer({ width: 8 }),
-                UI.Button({
-                    text: "删除",
-                    onClick: function () {
-                        const next = providers.slice();
-                        next.splice(idx, 1);
-                        setProviders(next);
-                    },
-                    containerColor: T.error,
-                    contentColor: T.onError
-                })
-            ]),
-            UI.Spacer({ height: 6 }),
-            UI.TextField({
-                value: row.url,
-                onValueChange: function (v) {
-                    const next = providers.slice();
-                    next[idx] = Object.assign({}, row, { url: v });
-                    setProviders(next);
-                },
-                label: "上游 URL",
-                placeholder: "https://api.example.com/v1",
-                singleLine: true,
-                fillMaxWidth: true
-            }),
-            UI.Spacer({ height: 6 }),
-            UI.TextField({
-                value: row.proxy,
-                onValueChange: function (v) {
-                    const next = providers.slice();
-                    next[idx] = Object.assign({}, row, { proxy: v });
-                    setProviders(next);
-                },
-                label: "代理（可空）",
-                placeholder: "http://127.0.0.1:7890",
-                singleLine: true,
-                fillMaxWidth: true
-            }),
-            UI.Spacer({ height: 6 }),
-            UI.TextField({
-                value: row.context,
-                onValueChange: function (v) {
-                    const next = providers.slice();
-                    next[idx] = Object.assign({}, row, { context: v });
-                    setProviders(next);
-                },
-                label: "模型 context（可空）",
-                placeholder: "200000",
-                singleLine: true,
-                fillMaxWidth: true,
-                keyboardType: "number"
-            })
+        return UI.Card({
+            fillMaxWidth: true,
+            containerColor: T.surface,
+            shape: { cornerRadius: 8 },
+            elevation: 1
+        }, [
+            UI.Column({ fillMaxWidth: true, padding: 14, spacing: 6 }, [
+                fieldControl(f)
+            ])
         ]);
     }
 
@@ -663,21 +485,25 @@ function Screen(ctx) {
                 text: "配置文件：" + (configFile || "~/.config/billion-context/billion-context.json"),
                 color: T.onSurfaceVariant,
                 fontSize: 12,
-                maxLines: 2
+                maxLines: 2,
+                softWrap: true
             }),
             UI.Spacer({ height: 8 }),
             UI.Row({ spacing: 8 }, [
-                UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy }),
-                UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary }),
-                UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary }),
-                UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError }),
-                UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded })
+                UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy, weight: 1 }),
+                UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary, weight: 1 }),
+                UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary, weight: 1 })
+            ]),
+            UI.Spacer({ height: 8 }),
+            UI.Row({ spacing: 8 }, [
+                UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError, weight: 1 }),
+                UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded, weight: 1 })
             ])
         ]),
 
         // 字段分组 —— 静态直写（不使用 map 展开）
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "基础设置", fontSize: 16, bold: true, color: T.primary }),
+            UI.Text({ text: "基础设置", fontSize: 16, bold: true, color: T.primary, softWrap: true }),
             fieldRow(field("port")),
             fieldRow(field("host")),
             fieldRow(field("upstream")),
@@ -686,7 +512,7 @@ function Screen(ctx) {
             fieldRow(field("passthrough"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "上下文压缩", fontSize: 16, bold: true, color: T.primary }),
+            UI.Text({ text: "上下文压缩", fontSize: 16, bold: true, color: T.primary, softWrap: true }),
             fieldRow(field("compress.minCompressRange")),
             fieldRow(field("compress.modelContextLimit")),
             fieldRow(field("compress.maxContextLimit")),
@@ -699,44 +525,24 @@ function Screen(ctx) {
             fieldRow(field("compress.injectNudge"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "MITM 抓包", fontSize: 16, bold: true, color: T.primary }),
+            UI.Text({ text: "MITM 抓包", fontSize: 16, bold: true, color: T.primary, softWrap: true }),
             fieldRow(field("mitm.enabled")),
             fieldRow(field("mitm.domains"))
         ]),
         UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "提示缓存", fontSize: 16, bold: true, color: T.primary }),
+            UI.Text({ text: "提示缓存", fontSize: 16, bold: true, color: T.primary, softWrap: true }),
             fieldRow(field("promptCache.routing"))
         ]),
 
-        // Providers 管理 —— 静态渲染固定行（不使用 map 展开）
-        UI.Column({ fillMaxWidth: true, spacing: 8 }, [
-            UI.Text({ text: "Providers（按上游 URL 路由）", fontSize: 16, bold: true, color: T.primary }),
-            UI.Text({ text: "每条 = 一个上游 URL 及其专属代理 / 全局模型 context。留空 proxy/context 表示继承全局。保存后需点「重载配置」生效。", color: T.onSurfaceVariant, fontSize: 11, maxLines: 3 }),
-            UI.Spacer({ height: 4 }),
-            providerRow(0),
-            providerRow(1),
-            providerRow(2),
-            UI.Spacer({ height: 4 }),
-            UI.Button({
-                text: "+ 添加 Provider",
-                onClick: function () {
-                    const next = providers.slice();
-                    next.push({ url: "", proxy: "", context: "" });
-                    setProviders(next);
-                },
-                containerColor: T.surfaceVariant,
-                contentColor: T.primary,
-                fillMaxWidth: true
-            })
-        ]),
 
         // 说明
         UI.Card({ fillMaxWidth: true, containerColor: T.surfaceVariant, padding: 12 }, [
             UI.Text({
-                text: "说明：修改写入 billion-context.json（持久化）。标「可热更新」的 compress 字段保存后点「热更新」即可生效，无需重启；port/host/upstream 等基础设置与 providers 改动需重启 bili（providers 也可在保存后点「重载配置」强制生效）。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
+                text: "说明：修改写入 billion-context.json（持久化）。标「可热更新」的 compress 字段保存后点「热更新」即可生效，无需重启；port/host/upstream 等基础设置改动需重启 bili。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
                 color: T.onSurfaceVariant,
                 fontSize: 11,
-                maxLines: 8
+                maxLines: 8,
+                softWrap: true
             })
         ]),
 
