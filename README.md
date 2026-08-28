@@ -67,10 +67,7 @@ Operit 不需要知道 ACP。
 
 ## 架构约束（严格遵守）
 
-- 不重新实现 billion-context；不嵌入 acp-kernel。
-- 不注册 PromptFinalizeHook / PromptEstimateFinalizeHook / SystemPromptComposeHook / ToolPromptComposeHook / MessageProcessingPlugin。
-- 不把 compress / decompress / search_context / acp_status 注册为 Operit Tool。
-- 不修改 Operit Kotlin；不使用反射 / Proxy / MITM / 网络 hook。
+- 不重新实现 billion-context。
 - 终端仅用 `Tools.System.terminal`（visible session），服务进程 `nohup setsid` 脱离 terminal 生命周期，健康以 HTTP 为准。
 
 ## 目录结构

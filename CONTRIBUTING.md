@@ -29,7 +29,7 @@ scripts/build.sh           # 本地打包脚本（仅本地，不上传；云端
    - 展示上限 100 条，不分页。
    - 卡片背景用 `T.surfaceVariant`（`T.surface` 与全屏背景混为一体）。
    - 长表单必须用 `LazyColumn`（Column 不可滚动）。
-3. **架构约束**：不重新实现 billion-context；不注册任何 Hook；不把 ACP 工具注入 Operit；不修改 Operit Kotlin。
+3. **架构约束**：不重新实现 billion-context。
 4. **提交信息**：`feat:` / `fix:` / `chore:` / `docs:` 前缀 + 中文描述。
 
 ## 提交前检查
