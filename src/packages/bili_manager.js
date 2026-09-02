@@ -106,6 +106,14 @@
             "parameters": []
         },
         {
+            "name": "check_latest",
+            "description": {
+                "zh": "查询 npm registry 上 billion-context 的最新版本，并对比当前已安装版本。单次查询，失败即返回错误，不重试。",
+                "en": "Query the latest billion-context version on the npm registry and compare with the currently installed version. Single query, returns an error on failure without retrying."
+            },
+            "parameters": []
+        },
+        {
             "name": "logs",
             "description": {
                 "zh": "读取官方日志 ~/.local/state/billion-context/bili.log 的尾部（默认最近 200 行，最多 800 行），不复制完整日志。",
@@ -215,7 +223,7 @@
  * - 状态持久化走文件通道（工具脚本环境无 setEnv），UI 通过工具获取真实状态。
  */
 const BiliManager = (function () {
-    var PACKAGE_VERSION = "0.3.3";
+    var PACKAGE_VERSION = "0.3.4";
 
     var DEFAULT_HOST = "127.0.0.1";
     var DEFAULT_PORT = 8787;
@@ -1185,6 +1193,95 @@ const BiliManager = (function () {
         });
     }
 
+    /**
+     * check_latest：查询 npm registry 最新版并对比本地已装版本。
+     * 单次查询：失败即返回错误，不重试（npm view 自带 --fetch-retries=0 限制）。
+     */
+    async function check_latest() {
+        return await runTool(async function () {
+            // 1) 本地已装版本（detect 一次性拿到 node/npm/bili 状态）
+            var detection = await detect();
+            var installedVersion = "";
+            var installedPath = "";
+            var hasNode = false;
+            var hasNpm = false;
+            if (detection.success) {
+                installedVersion = detection.bili && detection.bili.version ? detection.bili.version : "";
+                installedPath = detection.bili && detection.bili.path ? detection.bili.path : "";
+                hasNode = !!(detection.node && detection.node.installed);
+                hasNpm = !!(detection.npm && detection.npm.installed);
+            }
+            if (!hasNpm) {
+                return createErrorResult(
+                    new Error("npm 不可用，无法查询最新版本（检测失败即失败，未重试）"),
+                    { needNpm: true, installedVersion: installedVersion, installedPath: installedPath }
+                );
+            }
+            // 2) 查 registry 最新版：单次、不重试（--fetch-retries=0），超时 20s
+            var latestResult = await execCommand("npm view billion-context version --fetch-retries=0 --fetch-timeout=10000 2>&1", 25000);
+            var latestVersion = "";
+            if (latestResult.exitCode !== 0 || !latestResult.output) {
+                var npmError = asText(latestResult.output).trim();
+                return createErrorResult(
+                    new Error("查询最新版本失败（单次查询，未重试）：" + (npmError || "npm view 退出码 " + asText(latestResult.exitCode))),
+                    { installedVersion: installedVersion, installedPath: installedPath }
+                );
+            }
+            var lines = asText(latestResult.output).split(/\r?\n/);
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                if (/^\d+\.\d+\.\d+/.test(line)) {
+                    latestVersion = line;
+                    break;
+                }
+            }
+            if (!latestVersion) {
+                return createErrorResult(
+                    new Error("无法解析 npm registry 返回的最新版本（输出：" + asText(latestResult.output).slice(0, 200) + "）"),
+                    { installedVersion: installedVersion, installedPath: installedPath }
+                );
+            }
+            // 3) 对比
+            var hasUpdate = false;
+            if (installedVersion) {
+                hasUpdate = compareVersions(latestVersion, installedVersion) > 0;
+            }
+            return createSuccessResult({
+                latestVersion: latestVersion,
+                installedVersion: installedVersion,
+                installedPath: installedPath,
+                installed: !!installedVersion,
+                hasUpdate: hasUpdate,
+                message: installedVersion
+                    ? (hasUpdate
+                        ? "有新版本：" + latestVersion + "（当前 " + installedVersion + "）"
+                        : "已是最新版本：" + latestVersion)
+                    : "未安装（最新：" + latestVersion + "）"
+            });
+        });
+    }
+
+    /** 简单语义化版本比较：a>b 返回 1，a<b 返回 -1，相等返回 0（仅比较 x.y.z 三段）。 */
+    function compareVersions(a, b) {
+        function parts(v) {
+            var out = [];
+            var raw = asText(v).replace(/^v/i, "").trim().split(".");
+            for (var i = 0; i < 3; i++) {
+                var n = parseInt(raw[i], 10);
+                out.push(Number.isFinite(n) ? n : 0);
+            }
+            return out;
+        }
+        var pa = parts(a);
+        var pb = parts(b);
+        for (var i = 0; i < 3; i++) {
+            if (pa[i] !== pb[i]) {
+                return pa[i] > pb[i] ? 1 : -1;
+            }
+        }
+        return 0;
+    }
+
     async function update() {
         return await runTool(async function () {
             var detection = await detect();
@@ -1646,6 +1743,7 @@ const BiliManager = (function () {
     tools.health = health;
     tools.version = version;
     tools.update = update;
+    tools.check_latest = check_latest;
     tools.logs = logs;
     tools.proxy_url = proxy_url;
     tools.bili_config_get = bili_config_get;
@@ -1667,6 +1765,7 @@ const BiliManager = (function () {
         health: function (params) { return tools.health(params); },
         version: function (params) { return tools.version(params); },
         update: function (params) { return tools.update(params); },
+        check_latest: function (params) { return tools.check_latest(params); },
         logs: function (params) { return tools.logs(params); },
         proxy_url: function (params) { return tools.proxy_url(params); },
         bili_config_get: function (params) { return tools.bili_config_get(params); },
@@ -1689,6 +1788,7 @@ exports.status = BiliManager.status;
 exports.health = BiliManager.health;
 exports.version = BiliManager.version;
 exports.update = BiliManager.update;
+exports.check_latest = BiliManager.check_latest;
 exports.logs = BiliManager.logs;
 exports.proxy_url = BiliManager.proxy_url;
 exports.bili_config_get = BiliManager.bili_config_get;

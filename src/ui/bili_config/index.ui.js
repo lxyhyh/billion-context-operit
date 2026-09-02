@@ -55,6 +55,9 @@ function Screen(ctx) {
     const [busyLabel, setBusyLabel] = ctx.useState("bc_cfg_busy_label", "");
     const [lastMsg, setLastMsg] = ctx.useState("bc_cfg_last_msg", "");
     const [lastError, setLastError] = ctx.useState("bc_cfg_last_error", "");
+    // 最新版本检测结果：null=未检测，{checked:true, latest, installed, hasUpdate, message} 或 {checked:true, error}
+    const [latestInfo, setLatestInfo] = ctx.useState("bc_cfg_latest_info", null);
+    const [checkingLatest, setCheckingLatest] = ctx.useState("bc_cfg_checking_latest", false);
 
     // ---------- 串行队列 ----------
     let serialQueue = Promise.resolve();
@@ -208,6 +211,41 @@ function Screen(ctx) {
         } finally {
             setBusy(false);
             setBusyLabel("");
+        }
+    }
+
+    // 检测 bili 最新版本（单次，失败即显示错误，不自动重试）
+    async function doCheckLatest() {
+        if (checkingLatest) {
+            return;
+        }
+        setCheckingLatest(true);
+        setLatestInfo(null);
+        try {
+            const result = await serialCall("check_latest", {});
+            const record = parseRecord(result);
+            if (record.success === false) {
+                setLatestInfo({
+                    checked: true,
+                    error: asText(record.error) || "检测失败"
+                });
+                return;
+            }
+            setLatestInfo({
+                checked: true,
+                latest: asText(record.latestVersion),
+                installed: asText(record.installedVersion),
+                installedPath: asText(record.installedPath),
+                hasUpdate: !!record.hasUpdate,
+                message: asText(record.message)
+            });
+        } catch (error) {
+            setLatestInfo({
+                checked: true,
+                error: toErrorText(error)
+            });
+        } finally {
+            setCheckingLatest(false);
         }
     }
 
@@ -534,6 +572,47 @@ function Screen(ctx) {
             color: "onSurfaceVariant",
             softWrap: true
         }),
+
+        // 版本检测卡（单次检测，失败不重试）
+        UI.Card({
+            fillMaxWidth: true,
+            containerColor: T.surfaceVariant,
+            shape: { cornerRadius: 8 },
+            elevation: 1
+        }, [
+            UI.Column({ fillMaxWidth: true, padding: 14, spacing: 6 }, [
+                UI.Row({ fillMaxWidth: true, verticalAlignment: "center", spacing: 8 }, [
+                    UI.Column({ weight: 1, spacing: 2 }, [
+                        UI.Text({ text: "bili 版本", color: T.onSurface, fontSize: 14, bold: true, softWrap: true }),
+                        UI.Text({
+                            text: latestInfo && latestInfo.checked
+                                ? (latestInfo.error
+                                    ? "检测失败：" + latestInfo.error
+                                    : "已安装 " + (latestInfo.installed || "未安装") +
+                                      (latestInfo.latest ? " ｜ 最新 " + latestInfo.latest : "") +
+                                      (latestInfo.hasUpdate ? "（有新版本）" : ""))
+                                : "未检测。点击「检查更新」查询 npm 最新版本（单次查询，失败不重试）。",
+                            color: latestInfo && latestInfo.checked && latestInfo.error
+                                ? T.error
+                                : (latestInfo && latestInfo.checked && latestInfo.hasUpdate
+                                    ? T.tertiary
+                                    : T.onSurfaceVariant),
+                            fontSize: 11,
+                            maxLines: 3,
+                            softWrap: true
+                        })
+                    ]),
+                    UI.Spacer({ width: 12 }),
+                    UI.Button({
+                        text: checkingLatest ? "检查中…" : "检查更新",
+                        onClick: doCheckLatest,
+                        enabled: !checkingLatest,
+                        containerColor: T.primary,
+                        contentColor: T.onPrimary
+                    })
+                ])
+            ])
+        ]),
 
         // 操作按钮（无包裹卡片，3+2 两行均分）
         UI.Row({ spacing: 8 }, [
