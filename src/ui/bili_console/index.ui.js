@@ -34,6 +34,8 @@ function Screen(ctx) {
     const [busyLabel, setBusyLabel] = ctx.useState("bc_busy_label", "");
     const [lastMsg, setLastMsg] = ctx.useState("bc_last_msg", "");
     const [lastError, setLastError] = ctx.useState("bc_last_error", "");
+    // 最新版本检测：null=未检测，{checked:true,...} 或 {checked:true,error}；单次查询，失败不自动重试
+    const [latestInfo, setLatestInfo] = ctx.useState("bc_latest_info", null);
 
     // ---------- 全局串行调用队列（bridge 错配免疫） ----------
     let serialQueue = Promise.resolve();
@@ -144,6 +146,28 @@ function Screen(ctx) {
             setBiliVersion(asText(bili.version));
             setBiliPath(asText(bili.path));
             setLastMsg("检测完成: node=" + asText(node.version || "missing") + " npm=" + asText(npm.version || "missing") + " bili=" + asText(bili.version || "missing"));
+            // 顺带查 npm 最新版（单次查询；失败只标 latestInfo.error，不覆盖上面的检测结果）
+            setLatestInfo(null);
+            try {
+                const latestResult = await serialCall("check_latest", {});
+                const lr = parseRecord(latestResult);
+                if (lr.success === false) {
+                    setLatestInfo({ checked: true, error: asText(lr.error) || "查询最新版本失败" });
+                } else {
+                    setLatestInfo({
+                        checked: true,
+                        latest: asText(lr.latestVersion),
+                        installed: asText(lr.installedVersion),
+                        hasUpdate: !!lr.hasUpdate,
+                        message: asText(lr.message)
+                    });
+                    if (asText(lr.installedVersion)) {
+                        setBiliVersion(asText(lr.installedVersion));
+                    }
+                }
+            } catch (latestError) {
+                setLatestInfo({ checked: true, error: toErrorText(latestError) });
+            }
         } catch (error) {
             setLastError(toErrorText(error));
         } finally {
@@ -436,6 +460,19 @@ function Screen(ctx) {
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "版本:", color: T.onSurfaceVariant, fontSize: 14 }),
                     UI.Text({ text: biliVersion || "--", color: T.onSurface, fontSize: 14, bold: true })
+                ]),
+                UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
+                    UI.Text({ text: "最新:", color: T.onSurfaceVariant, fontSize: 14 }),
+                    UI.Text({
+                        text: latestInfo && latestInfo.checked
+                            ? (latestInfo.error ? "查询失败" : (latestInfo.latest || "--"))
+                            : "--",
+                        color: latestInfo && latestInfo.checked && !latestInfo.error
+                            ? (latestInfo.hasUpdate ? T.tertiary : T.primary)
+                            : T.onSurface,
+                        fontSize: 14,
+                        bold: true
+                    })
                 ])
             ]),
             UI.Spacer({ height: 10 }),
@@ -491,7 +528,20 @@ function Screen(ctx) {
                 UI.Row({ spacing: 8, verticalAlignment: "center", weight: 1 }, [
                     UI.Text({ text: "", color: T.onSurfaceVariant, fontSize: 13 })
                 ])
-            ])
+            ]),
+            // 最新版本检测状态（仅检测后显示；失败为红色提示，不自动重试）
+            latestInfo && latestInfo.checked ? UI.Spacer({ height: 10 }) : UI.Spacer({ height: 0 }),
+            latestInfo && latestInfo.checked ? UI.Row({ fillMaxWidth: true, verticalAlignment: "center", paddingHorizontal: 8, spacing: 8 }, [
+                UI.Text({
+                    text: latestInfo.error
+                        ? "最新版查询失败：" + latestInfo.error
+                        : (latestInfo.message || ("最新 " + (latestInfo.latest || "--"))),
+                    color: latestInfo.error ? T.error : (latestInfo.hasUpdate ? T.tertiary : T.onSurfaceVariant),
+                    fontSize: 12,
+                    maxLines: 3,
+                    softWrap: true
+                })
+            ]) : UI.Spacer({ height: 0 })
         ]),
 
         // 操作按钮（weight:1 均分，配置页款式）
