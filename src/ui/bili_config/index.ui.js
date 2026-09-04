@@ -6,10 +6,12 @@
  * 2. 所有 ctx.callTool 进入全局串行队列（bridge 并发响应错配免疫）。
  * 3. 失败不覆盖旧数据；未就绪显示 "--" 加载态。
  * 4. 保存 = 逐字段 diff 后 bili_config_set / bili_config_clear，全部串行。
- * 5. compress 类字段（path 以 "compress." 开头）可经官方 PUT /__bili/config 热更新，无需重启；
+ * 5. 保存后按字段自动生效：compress.* 以磁盘全量对象 PUT 热更；autoStart 写插件配置；
+ *    其余字段仅写盘，需重启 bili。
  */
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const helpers = require("../_shared/ui-helpers.js");
 
 /**
  * 可编辑字段定义（path 为 billion-context.json 点路径）：
@@ -28,16 +30,16 @@ const FIELDS = [
     { path: "debug", label: "调试模式", type: "bool", def: false, desc: "输出更详细的调试日志。" },
     { path: "autoUpdate", label: "自动更新", type: "bool", def: true, desc: "启动时自动检查并更新 billion-context。" },
     { path: "passthrough", label: "透传模式", type: "bool", def: false, desc: "关闭压缩/上下文管理，请求原样透传（相当于禁用 ACP）。" },
-    { path: "compress.minCompressRange", label: "最小压缩范围", type: "number", def: "1000", desc: "上下文低于该 token 数时不触发压缩。调小可更积极压缩。（可热更新）" },
-    { path: "compress.modelContextLimit", label: "模型上下文上限", type: "number", def: "200000", desc: "模型 context 上限（token）。留空 = 官方默认 200000。（可热更新）" },
-    { path: "compress.maxContextLimit", label: "最大上下文上限", type: "number", def: "", desc: "压缩器允许的最大上下文。留空 = 官方默认。（可热更新）" },
-    { path: "compress.emergencyThresholdPercent", label: "紧急压缩阈值", type: "number", def: "0.95", desc: "上下文占用达到该比例时触发紧急压缩（0~1）。留空 = 官方默认。（可热更新）" },
-    { path: "compress.nudgeGrowthTokens", label: "提示增长阈值", type: "number", def: "50000", desc: "上下文增量超过该 token 数时给出压缩提示。留空 = 官方默认。（可热更新）" },
-    { path: "compress.preserveRecentMessages", label: "保留最近消息数", type: "number", def: "5", desc: "压缩时保留最近 N 条消息原文。留空 = 官方默认。（可热更新）" },
-    { path: "compress.preserveRecentTokens", label: "保留最近 token 数", type: "number", def: "5000", desc: "压缩时保留最近 N 个 token 原文。留空 = 官方默认。（可热更新）" },
-    { path: "compress.tiers", label: "分层压缩", type: "bool", def: true, desc: "启用分层压缩（tier2/tier3 逐级压缩）。（可热更新）" },
-    { path: "compress.injectTool", label: "注入压缩工具", type: "bool", def: true, desc: "向模型注入压缩工具声明（模型可主动触发压缩）。（可热更新）" },
-    { path: "compress.injectNudge", label: "注入压缩提示", type: "bool", def: true, desc: "向模型注入压缩引导语（模型被提醒可压缩时）。（可热更新）" },
+    { path: "compress.minCompressRange", label: "最小压缩范围", type: "number", def: "1000", desc: "上下文低于该字符数时不触发压缩。调小可更积极压缩。" },
+    { path: "compress.modelContextLimit", label: "模型上下文上限", type: "number", def: "200000", desc: "模型 context 上限（token）。留空 = 官方默认 200000。" },
+    { path: "compress.maxContextLimit", label: "最大上下文上限", type: "number", def: "", desc: "压缩器允许的最大上下文。留空 = 官方默认。" },
+    { path: "compress.emergencyThresholdPercent", label: "紧急压缩阈值", type: "number", def: "0.95", desc: "上下文占用达到该比例时触发紧急压缩（0~1）。留空 = 官方默认。" },
+    { path: "compress.nudgeGrowthTokens", label: "提示增长阈值", type: "number", def: "50000", desc: "上下文增量超过该 token 数时给出压缩提示。留空 = 官方默认。" },
+    { path: "compress.preserveRecentMessages", label: "保留最近消息数", type: "number", def: "5", desc: "压缩时保留最近 N 条消息原文。留空 = 官方默认。" },
+    { path: "compress.preserveRecentTokens", label: "保留最近 token 数", type: "number", def: "5000", desc: "压缩时保留最近 N 个 token 原文。留空 = 官方默认。" },
+    { path: "compress.tiers", label: "分层压缩", type: "bool", def: true, desc: "启用分层压缩（tier2/tier3 逐级压缩）。" },
+    { path: "compress.injectTool", label: "注入压缩工具", type: "bool", def: true, desc: "向模型注入压缩工具声明（模型可主动触发压缩）。" },
+    { path: "compress.injectNudge", label: "注入压缩提示", type: "bool", def: true, desc: "向模型注入压缩引导语（模型被提醒可压缩时）。" },
     { path: "mitm.enabled", label: "MITM 抓包", type: "bool", def: false, desc: "启用 HTTPS 中间人代理（用于调试外部流量）。" },
     { path: "mitm.domains", label: "MITM 域名", type: "csv", def: "", desc: "需要 MITM 的域名，逗号分隔（如 api.example.com,cdn.example.com）。" },
     { path: "promptCache.routing", label: "提示缓存路由", type: "select", def: "auto", options: ["enabled", "disabled", "auto"], desc: "prompt cache 路由策略：enabled 强制开启 / disabled 关闭 / auto 自动。" }
@@ -45,6 +47,12 @@ const FIELDS = [
 
 function Screen(ctx) {
     const UI = ctx.UI;
+
+    // ---------- 共享脚手架（串行队列 / 文本 / 解析，见 ../_shared/ui-helpers.js） ----------
+    const { serialCall } = helpers.createSerialQueue(ctx);
+    const asText = helpers.asText;
+    const toErrorText = helpers.toErrorText;
+    const parseRecord = helpers.parseRecord;
 
     // ---------- 状态 ----------
     const [config, setConfig] = ctx.useState("bc_cfg_config", null);        // null=未加载，{} = 已加载
@@ -55,49 +63,6 @@ function Screen(ctx) {
     const [busyLabel, setBusyLabel] = ctx.useState("bc_cfg_busy_label", "");
     const [lastMsg, setLastMsg] = ctx.useState("bc_cfg_last_msg", "");
     const [lastError, setLastError] = ctx.useState("bc_cfg_last_error", "");
-
-    // ---------- 串行队列 ----------
-    let serialQueue = Promise.resolve();
-
-    function serialCall(toolName, params) {
-        const task = serialQueue.then(async () => {
-            const result = await ctx.callTool("bili_manager:" + toolName, params || {});
-            return result;
-        });
-        serialQueue = task.catch(() => {});
-        return task;
-    }
-
-    function asText(value) {
-        return value === undefined || value === null ? "" : String(value);
-    }
-
-    function toErrorText(error) {
-        if (error instanceof Error) {
-            return error.message || String(error);
-        }
-        return asText(error);
-    }
-
-    function parseRecord(result) {
-        if (result && typeof result === "object" && !Array.isArray(result)) {
-            return result;
-        }
-        if (typeof result === "string") {
-            const raw = result.trim();
-            if (raw) {
-                try {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && typeof parsed === "object") {
-                        return parsed;
-                    }
-                } catch (_e) {
-                    // ignore
-                }
-            }
-        }
-        return {};
-    }
 
     // ---------- 点路径取值 ----------
     function getByPath(obj, path) {
@@ -218,14 +183,35 @@ function Screen(ctx) {
         setLastMsg("");
         try {
             if (!config || typeof config !== "object") {
-                setLastError("请先点击「加载配置」再保存");
+                setLastError("请先点击「刷新」读取当前配置，再修改保存");
                 return;
             }
+            // diff 基准：官方配置字段取 config；插件字段（autoStart）取插件配置，避免基准错位导致单向失效
+            let pluginCfg = {};
+            try {
+                const pluginResult = await serialCall("plugin_config_get", {});
+                const pluginRecord = parseRecord(pluginResult);
+                if (pluginRecord.success !== false && pluginRecord.config && typeof pluginRecord.config === "object") {
+                    pluginCfg = pluginRecord.config;
+                }
+            } catch (_e) {
+                // 插件配置读取失败时按"无改动"对待插件字段
+            }
+            const baseFor = function (f) {
+                if (f.plugin) {
+                    const got = getByPath(pluginCfg, f.pluginKey || f.path);
+                    return got.ok ? configToFormValue(f, got.value) : (f.def === undefined || f.def === null ? "" : f.def);
+                }
+                const got = getByPath(config, f.path);
+                return got.ok ? configToFormValue(f, got.value) : (f.def === undefined || f.def === null ? "" : f.def);
+            };
             let changed = 0;
+            let compressChanged = false;
+            let pluginChanged = false;
+            let restartChanged = false;
             for (let i = 0; i < FIELDS.length; i++) {
                 const f = FIELDS[i];
-                const got = getByPath(config, f.path);
-                const orig = got.ok ? configToFormValue(f, got.value) : (f.def === undefined || f.def === null ? "" : f.def);
+                const orig = baseFor(f);
                 const current = Object.prototype.hasOwnProperty.call(form, f.path) ? form[f.path] : orig;
                 // 规范化比较：bool 直接比，其余按字符串比
                 const same = f.type === "bool" ? !!current === !!orig : asText(current) === asText(orig);
@@ -236,6 +222,7 @@ function Screen(ctx) {
                 const isEmpty = f.type === "csv" ? (Array.isArray(newValue) && newValue.length === 0) : asText(current).trim() === "";
                 if (f.plugin) {
                     // 插件自身配置（autoStart 等）：走 plugin_config_set，不写入官方 bili 配置
+                    pluginChanged = true;
                     const pluginSetResult = await serialCall("plugin_config_set", {
                         autoStartEnabled: !!newValue
                     });
@@ -263,6 +250,30 @@ function Screen(ctx) {
                     }
                 }
                 changed++;
+                if (f.path.indexOf("compress.") === 0) {
+                    compressChanged = true;
+                } else if (!f.plugin) {
+                    restartChanged = true;
+                }
+            }
+            if (compressChanged) {
+                // compress.* 已随上面写盘（bili_config_set/clear）；再以磁盘现网 compress 全量对象热更，
+                // 避免官方 PUT 整对象覆盖语义把未改动键冲掉（如 UI 未覆盖的官方键 prompts.* 等）
+                setBusyLabel("正在保存并热更新 compress…");
+                const getResult = await serialCall("bili_config_get", {});
+                const getRecord = parseRecord(getResult);
+                if (getRecord.success === false) {
+                    setLastError("compress 已写盘，但热更新失败：" + asText(getRecord.error));
+                    return;
+                }
+                const freshCfg = getRecord.config && typeof getRecord.config === "object" ? getRecord.config : {};
+                const freshCompress = freshCfg.compress && typeof freshCfg.compress === "object" ? freshCfg.compress : {};
+                const hotApplyResult = await serialCall("bili_config_hot_apply", { config: JSON.stringify({ compress: freshCompress }) });
+                const hotApplyRecord = parseRecord(hotApplyResult);
+                if (hotApplyRecord.success === false) {
+                    setLastError("compress 已写盘，但热更新失败：" + (asText(hotApplyRecord.error) || "bili_config_hot_apply 失败"));
+                    return;
+                }
             }
             // 重新加载以同步显示
             const result = await serialCall("bili_config_get", {});
@@ -275,124 +286,36 @@ function Screen(ctx) {
             setConfig(cfg);
             setConfigFile(asText(record.configFile));
             // 同步刷新插件配置（autoStart 等），避免被默认值覆盖
-            let pluginConfig = {};
+            let savedPluginConfig = {};
             try {
                 const pluginResult = await serialCall("plugin_config_get", {});
                 const pluginRecord = parseRecord(pluginResult);
                 if (pluginRecord.success !== false && pluginRecord.config && typeof pluginRecord.config === "object") {
-                    pluginConfig = pluginRecord.config;
+                    savedPluginConfig = pluginRecord.config;
                 }
             } catch (_e) {
                 // 忽略：保持已保存的表单值
             }
-            setPluginCfg(pluginConfig);
-            loadFormFromConfig(cfg, pluginConfig);
-            setLastMsg(changed === 0 ? "配置无变化，未写入" : "已保存 " + changed + " 项配置（compress 可点「热更新」立即生效）");
-        } catch (error) {
-            setLastError(toErrorText(error));
-        } finally {
-            setBusy(false);
-            setBusyLabel("");
-        }
-    }
-
-    async function doHotApply() {
-        // 把表单中 compress.* 的改动经官方 PUT /__bili/config 热应用到运行中的 bili（无需重启）
-        setBusy(true);
-        setBusyLabel("正在热更新 compress…");
-        setLastError("");
-        setLastMsg("");
-        try {
-            if (!config || typeof config !== "object") {
-                setLastError("请先点击「加载配置」再热更新");
-                return;
-            }
-            const hot = {};
-            let changed = 0;
-            FIELDS.forEach(function (f) {
-                if (f.path.indexOf("compress.") !== 0) {
-                    return;
-                }
-                const got = getByPath(config, f.path);
-                const orig = got.ok ? configToFormValue(f, got.value) : (f.def === undefined || f.def === null ? "" : f.def);
-                const current = Object.prototype.hasOwnProperty.call(form, f.path) ? form[f.path] : orig;
-                const same = f.type === "bool" ? !!current === !!orig : asText(current) === asText(orig);
-                if (same) {
-                    return;
-                }
-                hot[f.path.slice("compress.".length)] = formToConfigValue(f, current);
-                changed++;
-            });
+            setPluginCfg(savedPluginConfig);
+            loadFormFromConfig(cfg, savedPluginConfig);
             if (changed === 0) {
-                setLastMsg("compress 无改动，无需热更新");
-                return;
-            }
-            const result = await serialCall("bili_config_hot_apply", { config: JSON.stringify({ compress: hot }) });
-            const record = parseRecord(result);
-            if (record.success === false) {
-                setLastError("热更新失败：" + (asText(record.error) || "bili_config_hot_apply 失败"));
-                return;
-            }
-            // 热更新成功后再同步一次（把表单刷新为服务器确认的配置）
-            const reloadResult = await serialCall("bili_config_get", {});
-            const reloadRecord = parseRecord(reloadResult);
-            if (reloadRecord.success === false) {
-                setLastMsg("热更新成功，但刷新配置失败：" + asText(reloadRecord.error));
-                return;
-            }
-            const cfg = reloadRecord.config && typeof reloadRecord.config === "object" ? reloadRecord.config : {};
-            setConfig(cfg);
-            loadFormFromConfig(cfg);
-            setLastMsg("热更新成功（" + changed + " 项 compress 已生效，无需重启）");
-        } catch (error) {
-            setLastError(toErrorText(error));
-        } finally {
-            setBusy(false);
-            setBusyLabel("");
-        }
-    }
-
-    async function doReload() {
-        // 调用官方 POST /__bili/config/reload 强制重载配置文件
-        setBusy(true);
-        setBusyLabel("正在强制重载配置…");
-        setLastError("");
-        setLastMsg("");
-        try {
-            const result = await serialCall("bili_config_reload", {});
-            const record = parseRecord(result);
-            if (record.success === false || record.ok === false) {
-                setLastError("重载失败：" + (asText(record.error) || "bili_config_reload 失败"));
-                return;
-            }
-            const reloadResult = await serialCall("bili_config_get", {});
-            const reloadRecord = parseRecord(reloadResult);
-            if (reloadRecord.success === false) {
-                setLastMsg("重载成功，但刷新配置失败：" + asText(reloadRecord.error));
-                return;
-            }
-            const cfg = reloadRecord.config && typeof reloadRecord.config === "object" ? reloadRecord.config : {};
-            setConfig(cfg);
-            loadFormFromConfig(cfg);
-            setLastMsg("配置已重载");
-        } catch (error) {
-            setLastError(toErrorText(error));
-        } finally {
-            setBusy(false);
-            setBusyLabel("");
-        }
-    }
-
-    async function doReset() {
-        setBusy(true);
-        setBusyLabel("正在重置表单…");
-        setLastError("");
-        try {
-            if (config && typeof config === "object") {
-                loadFormFromConfig(config, pluginCfg || undefined);
-                setLastMsg("表单已重置为当前配置文件内容");
+                setLastMsg("配置无变化，未写入");
             } else {
-                setLastError("尚未加载配置");
+                let msg = "已保存 " + changed + " 项配置";
+                const notes = [];
+                if (compressChanged) {
+                    notes.push("compress 已热更生效（无需重启）");
+                }
+                if (pluginChanged) {
+                    notes.push("autoStart 在下次 Operit/容器启动时生效");
+                }
+                if (restartChanged) {
+                    notes.push("port/host 等基础设置需重启 bili 生效");
+                }
+                if (notes.length > 0) {
+                    msg += "；" + notes.join("；");
+                }
+                setLastMsg(msg);
             }
         } catch (error) {
             setLastError(toErrorText(error));
@@ -535,15 +458,10 @@ function Screen(ctx) {
             softWrap: true
         }),
 
-        // 操作按钮（无包裹卡片，3+2 两行均分）
+        // 操作按钮
         UI.Row({ spacing: 8 }, [
-            UI.Button({ text: "加载配置", onClick: doLoad, enabled: !busy, weight: 1 }),
-            UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary, weight: 1 }),
-            UI.Button({ text: "热更新", onClick: doHotApply, enabled: !busy && loaded, containerColor: T.tertiary, contentColor: T.onTertiary, weight: 1 })
-        ]),
-        UI.Row({ spacing: 8 }, [
-            UI.Button({ text: "重载配置", onClick: doReload, enabled: !busy, containerColor: T.error, contentColor: T.onError, weight: 1 }),
-            UI.Button({ text: "重置表单", onClick: doReset, enabled: !busy && loaded, weight: 1 })
+            UI.Button({ text: "刷新", onClick: doLoad, enabled: !busy, weight: 1 }),
+            UI.Button({ text: "保存", onClick: doSave, enabled: !busy && loaded, containerColor: T.primary, contentColor: T.onPrimary, weight: 1 })
         ]),
 
         // 字段分组 —— 静态直写（不使用 map 展开）
@@ -590,7 +508,7 @@ function Screen(ctx) {
         }, [
             UI.Column({ fillMaxWidth: true, padding: 14, spacing: 6 }, [
                 UI.Text({
-                    text: "说明：修改写入 billion-context.json（持久化）。标「可热更新」的 compress 字段保存后点「热更新」即可生效，无需重启；port/host/upstream 等基础设置改动需重启 bili。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
+                    text: "说明：修改后点「保存」写入 billion-context.json（持久化）。compress 字段保存后自动热更新，立即生效，无需重启；autoStart 在下次 Operit/容器启动时生效；port/host/upstream 等其余字段需重启 bili 生效。优先级：CLI 参数 > 环境变量 > 配置文件。仅环境变量可用的开关（如 ACP_RENDER_NONE）请在「管理」页启动时通过 env 参数注入。",
                     style: "bodySmall",
                     color: "onSurfaceVariant",
                     softWrap: true

@@ -46,9 +46,13 @@ bash scripts/build.sh   # 本地全绿（语法 + manifest JSON + 工具一致�
 ```
 src/
   main.js                  # ToolPkg 入口
-  packages/bili_manager.js # 全部管理工具（METADATA + exports 同步）
+  packages/bili_manager.js # 管理工具（METADATA + exports 同步）
+  packages/bili_parser.js  # 纯函数工具（版本/路径解析、点路径、JSON）
+  ui/_shared/ui-helpers.js # UI 共享脚手架（串行队列/文本/解析）
   ui/bili_console/         # 管理页 UI
   ui/bili_config/          # 配置页 UI
+test/
+  bili_parser.test.js      # 纯函数单测（node 直跑，不进打包）
 manifest.json              # 包清单（版本号在此维护）
 scripts/build.sh           # 本地打包脚本（仅本地，不上传；云端 CI 内联相同逻辑）
 .github/workflows/ci.yml   # CI（云端构建）

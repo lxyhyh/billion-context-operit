@@ -9,10 +9,17 @@
  */
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const helpers = require("../_shared/ui-helpers.js");
 
 function Screen(ctx) {
     const UI = ctx.UI;
     const T = ctx.MaterialTheme.colorScheme;
+
+    // ---------- 共享脚手架（串行队列 / 文本 / 解析，见 ../_shared/ui-helpers.js） ----------
+    const { serialCall } = helpers.createSerialQueue(ctx);
+    const asText = helpers.asText;
+    const toErrorText = helpers.toErrorText;
+    const parseRecord = helpers.parseRecord;
 
     // ---------- 状态 ----------
     const [installed, setInstalled] = ctx.useState("bc_installed", null);        // null=未知 true/false
@@ -37,49 +44,6 @@ function Screen(ctx) {
     // 最新版本检测：null=未检测，{checked:true,...} 或 {checked:true,error}；单次查询，失败不自动重试
     const [latestInfo, setLatestInfo] = ctx.useState("bc_latest_info", null);
 
-    // ---------- 全局串行调用队列（bridge 错配免疫） ----------
-    let serialQueue = Promise.resolve();
-
-    function serialCall(toolName, params) {
-        const task = serialQueue.then(async () => {
-            const result = await ctx.callTool("bili_manager:" + toolName, params || {});
-            return result;
-        });
-        serialQueue = task.catch(() => {});
-        return task;
-    }
-
-    function asText(value) {
-        return value === undefined || value === null ? "" : String(value);
-    }
-
-    function toErrorText(error) {
-        if (error instanceof Error) {
-            return error.message || String(error);
-        }
-        return asText(error);
-    }
-
-    function parseRecord(result) {
-        if (result && typeof result === "object" && !Array.isArray(result)) {
-            return result;
-        }
-        if (typeof result === "string") {
-            const raw = result.trim();
-            if (raw) {
-                try {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && typeof parsed === "object") {
-                        return parsed;
-                    }
-                } catch (_e) {
-                    // ignore
-                }
-            }
-        }
-        return {};
-    }
-
     // ---------- 数据加载（全部在 action 窗口） ----------
 
     async function refreshAll() {
@@ -87,6 +51,7 @@ function Screen(ctx) {
         setBusyLabel("正在读取状态…");
         setLastError("");
         try {
+            // 单次 status 即含 running/healthy/pid/版本/node/npm/installed（原还额外串行调 version，重复探测）
             const statusResult = await serialCall("status", {});
             const record = parseRecord(statusResult);
             if (record.success === false) {
@@ -98,22 +63,9 @@ function Screen(ctx) {
                 setBiliVersion(asText(record.biliVersion));
                 setBiliPath(asText(record.biliPath));
                 setHealthBody(asText(record.health && record.health.body) || "");
-            }
-
-            const versionResult = await serialCall("version", {});
-            const vRecord = parseRecord(versionResult);
-            if (vRecord.success !== false) {
-                if (asText(vRecord.biliVersion)) {
-                    setBiliVersion(asText(vRecord.biliVersion));
-                }
-                if (asText(vRecord.biliPath)) {
-                    setBiliPath(asText(vRecord.biliPath));
-                }
-                const node = vRecord.node || {};
-                const npm = vRecord.npm || {};
-                setInstalled(vRecord.installed === true);
-                setNodeVersion(asText(node.version));
-                setNpmVersion(asText(npm.version));
+                setInstalled(record.installed === true);
+                setNodeVersion(asText(record.nodeVersion));
+                setNpmVersion(asText(record.npmVersion));
             }
 
             setLastMsg("状态已刷新");

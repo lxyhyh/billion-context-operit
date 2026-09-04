@@ -221,9 +221,13 @@
  * - 终端调用仅使用 Tools.System.terminal（create/exec/execStreaming/close），禁止 hiddenExec。
  * - 服务进程用 nohup setsid 脱离 terminal 生命周期，健康以 HTTP /__bili/health 为准。
  * - 状态持久化走文件通道（工具脚本环境无 setEnv），UI 通过工具获取真实状态。
+ * - 纯函数工具（版本/路径解析、点路径、JSON）从 ./bili_parser.js 引入（宿主导入器支持相对 require）。
  */
+"use strict";
+const parser = require("./bili_parser.js");
+
 const BiliManager = (function () {
-    var PACKAGE_VERSION = "0.3.5";
+    var PACKAGE_VERSION = "0.3.9";
 
     var DEFAULT_HOST = "127.0.0.1";
     var DEFAULT_PORT = 8787;
@@ -246,37 +250,12 @@ const BiliManager = (function () {
     var tools = {};
 
     /* ------------------------------------------------------------------ */
-    /* 基础工具                                                             */
+    /* 基础工具（纯函数实现统一收敛到 bili_parser.js，此处仅做局部绑定）        */
     /* ------------------------------------------------------------------ */
 
-    function asText(value) {
-        if (value === undefined || value === null) {
-            return "";
-        }
-        return String(value);
-    }
-
-    function firstNonBlank() {
-        for (var i = 0; i < arguments.length; i++) {
-            var value = arguments[i];
-            if (typeof value === "string" && value.trim()) {
-                return value.trim();
-            }
-        }
-        return "";
-    }
-
-    function parsePositiveInt(value, fallbackValue) {
-        var raw = asText(value).trim();
-        if (!raw) {
-            return fallbackValue;
-        }
-        var parsed = Number(raw);
-        if (!Number.isFinite(parsed) || parsed <= 0) {
-            return fallbackValue;
-        }
-        return Math.floor(parsed);
-    }
+    var asText = parser.asText;
+    var firstNonBlank = parser.firstNonBlank;
+    var parsePositiveInt = parser.parsePositiveInt;
 
     function createErrorResult(error, extra) {
         var result = {
@@ -381,6 +360,33 @@ const BiliManager = (function () {
         var probeCommand = command + " 2>&1";
         var result = await execCommand(probeCommand, parsePositiveInt(timeoutMs, 12000));
         return result;
+    }
+
+    /**
+     * 单次 exec 探测 node/npm/bili 三件套（版本 + 路径）。将原先 detect 里 3 次
+     * runProbe 合并为 1 次 terminal 往返，避免多次跨进程桥接拖慢 UI。
+     * 输出用 __SEG1__/__SEG2__/__SEG3__ 标记分段。
+     */
+    async function probeEnvironment(timeoutMs) {
+        var command = [
+            "echo __SEG1__; node --version 2>/dev/null; command -v node 2>/dev/null;",
+            "echo __SEG2__; npm --version 2>/dev/null; command -v npm 2>/dev/null;",
+            "echo __SEG3__; command -v bili 2>/dev/null; bili --version 2>/dev/null; true"
+        ].join(" ");
+        var result = await execCommand(command, parsePositiveInt(timeoutMs, 12000));
+        var output = asText(result.output);
+        var segment = { node: "", npm: "", bili: "" };
+        var current = "";
+        var lines = output.split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (line === "__SEG1__") { current = "node"; continue; }
+            if (line === "__SEG2__") { current = "npm"; continue; }
+            if (line === "__SEG3__") { current = "bili"; continue; }
+            if (!line) { continue; }
+            segment[current] += (segment[current] ? "\n" : "") + line;
+        }
+        return { output: output, nodeText: segment.node, npmText: segment.npm, biliText: segment.bili };
     }
 
     /* ------------------------------------------------------------------ */
@@ -653,58 +659,18 @@ const BiliManager = (function () {
 
     async function detect() {
         return await runTool(async function () {
-            var nodeResult = await runProbe("node --version 2>&1; command -v node 2>&1");
-            var npmResult = await runProbe("npm --version 2>&1; command -v npm 2>&1");
-            var biliResult = await runProbe("command -v bili 2>&1 || true; bili --version 2>&1 || true");
+            // 单次 terminal 往返取 node/npm/bili 版本与路径（原为 3 次 runProbe）
+            var env = await probeEnvironment(12000);
+            var nodeInfo = parser.parseVersionPath(env.nodeText, "node");
+            var npmInfo = parser.parseVersionPath(env.npmText, "npm");
+            var biliInfo = parser.parseVersionPath(env.biliText, "bili");
 
-            var nodeOutput = asText(nodeResult.output);
-            var npmOutput = asText(npmResult.output);
-            var biliOutput = asText(biliResult.output);
-
-            var nodeLines = nodeOutput.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
-            var npmLines = npmOutput.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
-            var biliLines = biliOutput.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
-
-            function extractVersion(lines, prefix) {
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i];
-                    if (prefix && line.indexOf(prefix) === 0) {
-                        return line.slice(prefix.length).trim();
-                    }
-                    if (/^v?\d+\.\d+\.\d+/.test(line)) {
-                        return line;
-                    }
-                }
-                return "";
-            }
-
-            function extractPath(lines, binaryName) {
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i];
-                    if (line.indexOf(binaryName) >= 0 && line.indexOf("/") >= 0) {
-                        return line;
-                    }
-                    if (/^\//.test(line)) {
-                        return line;
-                    }
-                }
-                return "";
-            }
-
-            var nodeVersion = extractVersion(nodeLines, "v");
-            var nodePath = extractPath(nodeLines, "node");
-            var npmVersion = extractVersion(npmLines, "");
-            var npmPath = extractPath(npmLines, "npm");
-            var biliVersion = extractVersion(biliLines, "");
-            var biliPath = extractPath(biliLines, "bili");
-            if (!biliPath) {
-                for (var i = 0; i < biliLines.length; i++) {
-                    if (biliLines[i].indexOf("/") >= 0) {
-                        biliPath = biliLines[i];
-                        break;
-                    }
-                }
-            }
+            var nodeVersion = nodeInfo.version;
+            var nodePath = nodeInfo.path;
+            var npmVersion = npmInfo.version;
+            var npmPath = npmInfo.path;
+            var biliVersion = biliInfo.version;
+            var biliPath = biliInfo.path;
 
             var hasNode = !!(nodeVersion || nodePath);
             var hasNpm = !!(npmVersion || npmPath);
@@ -716,19 +682,19 @@ const BiliManager = (function () {
                     installed: hasNode,
                     version: nodeVersion,
                     path: nodePath,
-                    raw: nodeOutput.slice(0, 400)
+                    raw: env.nodeText.slice(0, 400)
                 },
                 npm: {
                     installed: hasNpm,
                     version: npmVersion,
                     path: npmPath,
-                    raw: npmOutput.slice(0, 400)
+                    raw: env.npmText.slice(0, 400)
                 },
                 bili: {
                     installed: hasBili,
                     version: biliVersion,
                     path: biliPath,
-                    raw: biliOutput.slice(0, 400)
+                    raw: env.biliText.slice(0, 400)
                 },
                 summary: {
                     node: hasNode ? (nodeVersion || "present") : "missing",
@@ -1101,45 +1067,47 @@ const BiliManager = (function () {
             var port = parsePositiveInt(config.port, DEFAULT_PORT);
             var host = firstNonBlank(config.host, DEFAULT_HOST);
 
-            var pid = await readPidFile(port);
+            // 合并 PID 文件读取 + 日志存在探测为单条 exec（原为两条独立 exec）
+            var pidFile = buildPidFile(port);
+            var logFile = resolveLogFile();
+            var pidProbe = await execCommand(
+                "cat " + shellQuote(pidFile) + " 2>/dev/null; echo __PID_END__; " +
+                "test -f " + shellQuote(logFile) + " && echo __LOG_EXISTS__ || echo __LOG_MISSING__",
+                8000
+            );
+            var pidText = "";
+            var logExists = false;
+            var pidOutLines = asText(pidProbe.output).split(/\r?\n/);
+            for (var pi = 0; pi < pidOutLines.length; pi++) {
+                var pl = pidOutLines[pi].trim();
+                if (pl === "__PID_END__") { break; }
+                if (/^\d+$/.test(pl)) { pidText = pl; }
+            }
+            if (asText(pidProbe.output).indexOf("__LOG_EXISTS__") >= 0) {
+                logExists = true;
+            }
+            var pid = Number(pidText);
+            if (!Number.isFinite(pid) || pid <= 0) {
+                pid = null;
+            }
             var pidAlive = false;
             if (pid) {
                 pidAlive = await pidIsAlive(pid);
             }
             var health = await probeHealth(port, 6000);
             var running = health.healthy || pidAlive;
-            var version = "";
-            var biliPath = "";
-            if (running || pidAlive) {
-                var versionResult = await runProbe("bili --version 2>&1; command -v bili 2>&1", 10000);
-                var lines = asText(versionResult.output).split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i];
-                    if (!version && /^v?\d+\.\d+\.\d+/.test(line)) {
-                        version = line;
-                    }
-                    if (!biliPath && line.indexOf("/") >= 0) {
-                        biliPath = line;
-                    }
-                }
-            } else {
-                var detection = await detect();
-                if (detection.success) {
-                    version = detection.bili && detection.bili.version ? detection.bili.version : "";
-                    biliPath = detection.bili && detection.bili.path ? detection.bili.path : "";
-                }
-            }
 
-            var logExists = false;
-            try {
-                var logCheck = await execCommand(
-                    "test -f " + resolveLogFile() + " && echo __LOG_EXISTS__ || echo __LOG_MISSING__",
-                    8000
-                );
-                logExists = asText(logCheck.output).indexOf("__LOG_EXISTS__") >= 0;
-            } catch (_error) {
-                logExists = false;
-            }
+            // 版本/路径：统一单次探测（运行中或未运行都取同一环境探测结果，原为独立 runProbe/detect）
+            var env = await probeEnvironment(12000);
+            var biliInfo = parser.parseVersionPath(env.biliText, "bili");
+            var version = biliInfo.version;
+            var biliPath = biliInfo.path;
+            var nodeInfo = parser.parseVersionPath(env.nodeText, "node");
+            var nodeVersion = nodeInfo.version;
+            var nodePath = nodeInfo.path;
+            var npmInfo = parser.parseVersionPath(env.npmText, "npm");
+            var npmVersion = npmInfo.version;
+            var npmPath = npmInfo.path;
 
             return createSuccessResult({
                 running: running,
@@ -1151,7 +1119,12 @@ const BiliManager = (function () {
                 health: health,
                 biliVersion: version,
                 biliPath: biliPath,
-                logFile: resolveLogFile(),
+                nodeVersion: nodeVersion,
+                nodePath: nodePath,
+                npmVersion: npmVersion,
+                npmPath: npmPath,
+                installed: !!(version || biliPath),
+                logFile: logFile,
                 logExists: logExists,
                 proxyBaseUrl: "http://127.0.0.1:" + port + "/bili/",
                 state: health.healthy ? "running" : (pidAlive ? "starting" : "stopped")
@@ -1176,19 +1149,18 @@ const BiliManager = (function () {
 
     async function version() {
         return await runTool(async function () {
-            var detection = await detect();
-            var biliVersion = "";
-            var biliPath = "";
-            if (detection.success) {
-                biliVersion = detection.bili && detection.bili.version ? detection.bili.version : "";
-                biliPath = detection.bili && detection.bili.path ? detection.bili.path : "";
-            }
+            // 复用单次探测（不重复多次 runProbe）
+            var env = await probeEnvironment(12000);
+            var node = parser.parseVersionPath(env.nodeText, "node");
+            var npm = parser.parseVersionPath(env.npmText, "npm");
+            var bili = parser.parseVersionPath(env.biliText, "bili");
+            var installed = !!(bili.version || bili.path);
             return createSuccessResult({
-                biliVersion: biliVersion,
-                biliPath: biliPath,
-                node: detection.node || { installed: false },
-                npm: detection.npm || { installed: false },
-                installed: !!(detection.success && detection.bili && detection.bili.installed)
+                biliVersion: bili.version || "",
+                biliPath: bili.path || "",
+                node: { installed: !!(node.version || node.path), version: node.version, path: node.path },
+                npm: { installed: !!(npm.version || npm.path), version: npm.version, path: npm.path },
+                installed: installed
             });
         });
     }
@@ -1199,18 +1171,12 @@ const BiliManager = (function () {
      */
     async function check_latest() {
         return await runTool(async function () {
-            // 1) 本地已装版本（detect 一次性拿到 node/npm/bili 状态）
-            var detection = await detect();
-            var installedVersion = "";
-            var installedPath = "";
-            var hasNode = false;
-            var hasNpm = false;
-            if (detection.success) {
-                installedVersion = detection.bili && detection.bili.version ? detection.bili.version : "";
-                installedPath = detection.bili && detection.bili.path ? detection.bili.path : "";
-                hasNode = !!(detection.node && detection.node.installed);
-                hasNpm = !!(detection.npm && detection.npm.installed);
-            }
+            // 1) 本地已装版本：单次探测（不重复完整 detect）
+            var env = await probeEnvironment(12000);
+            var biliInfo = parser.parseVersionPath(env.biliText, "bili");
+            var installedVersion = biliInfo.version;
+            var installedPath = biliInfo.path;
+            var hasNpm = parser.toLines(env.npmText).length > 0;
             if (!hasNpm) {
                 return createErrorResult(
                     new Error("npm 不可用，无法查询最新版本（检测失败即失败，未重试）"),
@@ -1261,26 +1227,8 @@ const BiliManager = (function () {
         });
     }
 
-    /** 简单语义化版本比较：a>b 返回 1，a<b 返回 -1，相等返回 0（仅比较 x.y.z 三段）。 */
-    function compareVersions(a, b) {
-        function parts(v) {
-            var out = [];
-            var raw = asText(v).replace(/^v/i, "").trim().split(".");
-            for (var i = 0; i < 3; i++) {
-                var n = parseInt(raw[i], 10);
-                out.push(Number.isFinite(n) ? n : 0);
-            }
-            return out;
-        }
-        var pa = parts(a);
-        var pb = parts(b);
-        for (var i = 0; i < 3; i++) {
-            if (pa[i] !== pb[i]) {
-                return pa[i] > pb[i] ? 1 : -1;
-            }
-        }
-        return 0;
-    }
+    /** 语义化版本比较（实现见 bili_parser.js） */
+    var compareVersions = parser.compareVersions;
 
     async function update() {
         return await runTool(async function () {
@@ -1455,93 +1403,15 @@ const BiliManager = (function () {
         await Tools.Files.write(path, payload, false, "linux");
         return path;
     }
-    /**
-     * 点路径取值/赋值/删除。path 形如 "port" 或 "compress.minCompressRange"。
-     * 返回 [ok, error, value]。
-     */
-    function getByDotPath(obj, path) {
-        var parts = path.split(".").filter(Boolean);
-        var current = obj;
-        for (var i = 0; i < parts.length; i++) {
-            if (current === null || typeof current !== "object") {
-                return [false, "路径 " + path + " 不存在（" + parts.slice(0, i).join(".") + " 不是对象）", undefined];
-            }
-            if (!Object.prototype.hasOwnProperty.call(current, parts[i])) {
-                return [false, "路径 " + path + " 不存在（缺少段 " + parts[i] + "）", undefined];
-            }
-            current = current[parts[i]];
-        }
-        return [true, null, current];
-    }
-
-    function setByDotPath(obj, path, value) {
-        var parts = path.split(".").filter(Boolean);
-        if (parts.length === 0) {
-            return "路径不能为空";
-        }
-        var current = obj;
-        for (var i = 0; i < parts.length - 1; i++) {
-            var part = parts[i];
-            if (current[part] === null || typeof current[part] !== "object" || Array.isArray(current[part])) {
-                current[part] = {};
-            }
-            current = current[part];
-        }
-        current[parts[parts.length - 1]] = value;
-        return null;
-    }
-
-    function deleteByDotPath(obj, path) {
-        var parts = path.split(".").filter(Boolean);
-        if (parts.length === 0) {
-            return "路径不能为空";
-        }
-        var stack = [];
-        var current = obj;
-        for (var i = 0; i < parts.length - 1; i++) {
-            var part = parts[i];
-            if (current === null || typeof current !== "object" || !Object.prototype.hasOwnProperty.call(current, part)) {
-                return null; // 路径不存在，无需删除
-            }
-            stack.push(current);
-            current = current[part];
-        }
-        var lastPart = parts[parts.length - 1];
-        if (current === null || typeof current !== "object" || !Object.prototype.hasOwnProperty.call(current, lastPart)) {
-            return null; // 末段不存在
-        }
-        delete current[lastPart];
-        // 级联清理空父对象
-        for (var j = stack.length - 1; j >= 0; j--) {
-            var parent = stack[j];
-            var child = parts[j];
-            var childObj = parent[child];
-            if (childObj && typeof childObj === "object" && !Array.isArray(childObj) && Object.keys(childObj).length === 0) {
-                delete parent[child];
-            } else {
-                break;
-            }
-        }
-        return null;
-    }
 
     /**
-     * 解析 JSON 值：数字/布尔/null/数组/对象/字符串。失败返回 null。
+     * 点路径取值/赋值/删除、JSON 值解析：实现收敛到 bili_parser.js。
+     * 注：原 getByDotPath 返回三元组但无任何引用，parser 版返回 {ok,value} 为唯一约定。
      */
-    function parseJsonValue(raw) {
-        if (typeof raw === "string") {
-            var trimmed = raw.trim();
-            if (trimmed === "") {
-                return { ok: false, error: "值为空" };
-            }
-            try {
-                return { ok: true, value: JSON.parse(trimmed) };
-            } catch (error) {
-                return { ok: false, error: "不是合法 JSON：" + (error && error.message ? error.message : String(error)) };
-            }
-        }
-        return { ok: true, value: raw };
-    }
+    var getByDotPath = parser.getByDotPath;
+    var setByDotPath = parser.setByDotPath;
+    var deleteByDotPath = parser.deleteByDotPath;
+    var parseJsonValue = parser.parseJsonValue;
 
     async function bili_config_get(params) {
         return await runTool(async function () {
